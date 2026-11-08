@@ -1,0 +1,26 @@
+name: CI
+
+# Compila e testa em push na main e em pull requests.
+# A publicacao (tags v*) fica em release.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restaurar
+        run: dotnet restore app/WinDiag.sln
+      - name: Compilar
+        run: dotnet build app/WinDiag.sln -c Release --no-restore
+      - name: Testar
+        run: dotnet test app/WinDiag.sln -c Release --no-build

@@ -1,0 +1,28 @@
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets,xaml,json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{cs,xaml,csproj,props,md,ps1,json,bat}]
+end_of_line = crlf
+
+[*.yml]
+end_of_line = lf
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_using_directive_placement = outside_namespace:suggestion
+dotnet_sort_system_directives_first = true
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = false:none
+dotnet_style_qualification_for_field = false:suggestion

@@ -1,0 +1,33 @@
+<Project>
+
+  <!-- Configuração comum a todos os projetos do WinDiag. A versão tem uma única fonte: aqui. -->
+  <PropertyGroup>
+    <Version>1.1.1</Version>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
+    <InformationalVersion>1.1.1</InformationalVersion>
+    <Company>dougllascda</Company>
+    <Product>WinDiag</Product>
+    <Copyright>Copyright (c) 2026 dougllascda</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <!-- latest-recommended gerou 134 avisos (CA1861, CA1707, CA1859, CA1310 etc.); mantido em latest-minimum até serem tratados. -->
+    <AnalysisLevel>latest-minimum</AnalysisLevel>
+  </PropertyGroup>
+
+  <!--
+    Qualquer aviso quebra o build, inclusive CS1591 (tipo ou membro público sem comentário XML).
+    O projeto de testes desliga só a geração de documentação (ver WinDiag.Tests.csproj).
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

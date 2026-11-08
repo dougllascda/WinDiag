@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>WinDiag</AssemblyName>
+    <RootNamespace>WinDiag.App</RootNamespace>
+    <Product>WinDiag</Product>
+    <Description>Inventário de hardware, diagnóstico guiado e otimizações reversíveis para jogos.</Description>
+    <ApplicationIcon>Assets\WinDiag.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Release pede administrador ao abrir (UAC, igual ao CPU-Z). Debug roda sem UAC para testes. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' != 'Release'">
+    <ApplicationManifest>app.debug.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\WinDiag.ico" />
+    <ProjectReference Include="..\WinDiag.Core\WinDiag.Core.csproj" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+</Project>

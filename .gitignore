@@ -1,0 +1,15 @@
+bin/
+obj/
+dist/
+*.user
+.vs/
+TestResults/
+legacy/dist/
+# Configuração local do assistente de desenvolvimento (não faz parte do projeto)
+.claude/
+# Relatórios gerados localmente
+System_Diagnostic_Report_*
+WinDiag_Relatorio_*
+
+# Versao antiga em .bat/PowerShell: mantida so localmente
+legacy/

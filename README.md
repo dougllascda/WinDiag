@@ -1,0 +1,163 @@
+<p align="center">
+  <img src="docs/assets/logo.png" alt="WinDiag logo" width="96">
+</p>
+
+<h1 align="center">WinDiag</h1>
+
+<p align="center">
+  Hardware inventory, explained diagnostics and reversible gaming optimizations for Windows 10/11.
+</p>
+
+<p align="center">
+  <b>English</b> | <a href="README.pt-BR.md">Português (Brasil)</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/dougllascda/WinDiag/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/dougllascda/WinDiag"></a>
+  <a href="https://github.com/dougllascda/WinDiag/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/dougllascda/WinDiag/total"></a>
+  <a href="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/dougllascda/WinDiag"></a>
+  <img alt="Platform: Windows 10 | 11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4">
+  <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
+</p>
+
+<p align="center">
+  <img src="docs/assets/overview-dark.png" alt="WinDiag overview tab with the gaming configuration score and hardware cards" width="860">
+</p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/analysis.png" alt="Platform analysis" width="420"><br><sub>Platform analysis</sub></td>
+    <td align="center"><img src="docs/assets/sensors.png" alt="Sensors" width="420"><br><sub>Sensors</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/optimizations.png" alt="Optimizations" width="420"><br><sub>Optimizations</sub></td>
+    <td align="center"><img src="docs/assets/overview-light.png" alt="Overview, light theme" width="420"><br><sub>Overview, light theme</sub></td>
+  </tr>
+</table>
+
+WinDiag opens already reading everything, with no "detect" button: processor, motherboard, memory, graphics card, monitors, disks (with S.M.A.R.T.), virtualization, antivirus, startup and events. Each finding comes with **what it means** and **what to do**, and the summary ranks the **likely gaming bottlenecks** by impact.
+
+## Highlights
+
+- CPU-Z/GPU-Z-style inventory, read automatically on launch, with live values every second.
+- Platform analysis: where the limit is and what can be improved, based on measured readings only.
+- Explained diagnostics: every finding says what it means and what to do.
+- Reversible optimizations: one switch per item, a snapshot before every change, and undo for that item alone.
+- HWiNFO-style sensors tab (current, min, max, average) with temperature, fan, VRM and disk alerts.
+- Power supply estimate with a warning if the PSU you declare looks undersized.
+- Simple mode (plain language) and Detailed mode; interface and reports in English and Brazilian Portuguese.
+- No telemetry, no network access, no runtime downloads and no runtime-generated code.
+
+## Download
+
+Get the latest build from the [Releases page](https://github.com/dougllascda/WinDiag/releases/latest).
+
+| File | Who it is for |
+|---|---|
+| `WinDiag-Setup-<version>.exe` (**recommended**) | Installer: Start menu entry, optional desktop icon, uninstall from Windows |
+| `WinDiag-Portable-<version>.exe` | Portable, nothing to install (runtime embedded) |
+| `WinDiag-<version>-fx.exe` | Small download; requires the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+
+## Verify your download
+
+Compare the hash with `SHA256SUMS.txt` from the release:
+
+```powershell
+Get-FileHash .\WinDiag-Setup-<version>.exe -Algorithm SHA256
+```
+
+Confirm where the build came from with the [GitHub CLI](https://cli.github.com/):
+
+```powershell
+gh attestation verify .\WinDiag-Setup-<version>.exe --repo dougllascda/WinDiag
+```
+
+More details in [docs/SIGNING.md](docs/SIGNING.md).
+
+## Features
+
+- **Platform analysis:** shows where the limit of the system is and what can be improved, without claiming causes that were not measured.
+- **Summary:** OK / INFO / WARNING / ATTENTION counts, likely bottlenecks and every check.
+- **CPU, Motherboard, Memory, Graphics, Monitors, Storage, System and security:** inventory with live readings (per-thread clock, load, RAM, temperature, power, GPU clocks and PCIe link).
+- **Sensors:** current, min, max and average values. Reads from HWiNFO (with Shared Memory Support enabled) and from the bundled LibreHardwareMonitor library.
+- **Optimizations:** one switch per item. Turning it on takes a snapshot first; turning it off restores only that item. Items already set outside WinDiag (for example by AtlasOS) are shown as locked. A snapshot history can restore a whole snapshot.
+- **Game session:** lists heavy background apps and closes only the ones you select.
+- **Capture:** samples CPU, GPU, DPC, disk, paging and RAM every second while you play, identifies the game process by 3D GPU load and summarizes with percentiles (P50/P95/P99).
+- **Settings:** theme (Automatic, Light, Dark), Simple/Detailed mode, language, your power supply, sensor status, data folders and licenses.
+- **Export report:** a single HTML (self-contained, light/dark, print-ready) or TXT file, with user name and serial numbers masked.
+
+## Safety
+
+**Reads, without changing anything:** WMI/CIM, the registry, performance counters, `nvidia-smi --query`, `powercfg /query`, `bcdedit /enum`, `fltmc filters`, `fsutil behavior query` and event logs.
+
+**Changes something only when you turn a switch on and confirm:**
+
+| Item | Change |
+|---|---|
+| Game DVR | `GameDVR_Enabled` / `AppCaptureEnabled` = 0 |
+| HAGS | `HwSchMode` = 2 |
+| Memory compression | `Enable-MMAgent` / `Disable-MMAgent -MemoryCompression` |
+| Windowed game optimizations | `SwapEffectUpgradeEnable=1` in `DirectXUserGlobalSettings` (other options preserved) |
+| USB selective suspend / ASPM | `powercfg /setacvalueindex` (plugged in) |
+| Game Mode | `AutoGameModeEnabled` = 1 |
+| Startup apps | `StartupApproved` (same mechanism as Task Manager) |
+| SysMain / Windows Search | service startup type |
+| Hibernation | `powercfg /hibernate off` |
+| Memory Integrity (HVCI) | `HypervisorEnforcedCodeIntegrity\Enabled` = 0 |
+| Hypervisor (high risk) | `bcdedit /set hypervisorlaunchtype off` |
+| Forced HPET | `bcdedit /deletevalue useplatformclock` |
+| MPO (experimental) | `Dwm\OverlayTestMode` = 5 |
+| Temporary files | deletes files in `%TEMP%` and `C:\Windows\Temp` (not reversible) |
+
+- High-risk items ask you to type `CONFIRM` before they are applied.
+- Before every change, the previous state is saved as a JSON snapshot in `%ProgramData%\WinDiagMaint\snapshots\`; the history is in `changes.log`. Turning the switch off, or restoring a snapshot, goes back to the saved value.
+- No network access and no telemetry: WinDiag does not download, upload or update anything by itself.
+- No obfuscation, packer or runtime-generated code. Native calls are limited to documented Win32 APIs.
+- Gains vary by PC and game; optimizations are optional. Read more in [SECURITY.md](SECURITY.md).
+
+## FAQ
+
+**Windows SmartScreen warns me about the file.**
+The executables are not code-signed yet, so SmartScreen may show a warning. Choose "More info" > "Run anyway" after checking the SHA256 hash and the build attestation (see [Verify your download](#verify-your-download)).
+
+**Why does it ask for administrator rights?**
+S.M.A.R.T., BCD, file system minifilters and the optimizations need that access. Without it, the app still opens and marks affected readings as partial ("requires administrator").
+
+**My antivirus flagged it.**
+The executable is unsigned and, when you turn optimizations on, changes system settings (registry, BCD, power). Some antivirus products may be suspicious of that. Please open an issue with the detection name and the version.
+
+**The CPU temperature is missing.**
+Windows does not expose the core sensor without a third-party driver. Either open HWiNFO with **Shared Memory Support** enabled, or install the PawnIO driver from its official website so the bundled LibreHardwareMonitor library can read it. WinDiag does not include, download or install that driver.
+
+**The power supply is not detected.**
+Software cannot detect a PSU on most systems. Enter it in **Settings** and the app will compare it with the estimated peak consumption. Digital Corsair/NZXT units can be detected over USB.
+
+**Which languages are supported?**
+English and Brazilian Portuguese. The automatic option follows Windows and can be changed in Settings; numbers and dates follow the language.
+
+WinDiag does not measure frame time or point to the driver responsible for DPC latency; use PresentMon/CapFrameX and LatencyMon for that.
+
+## Build from source
+
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+
+```powershell
+dotnet build app\WinDiag.sln -c Debug
+dotnet test app\WinDiag.sln
+pwsh -File publish.ps1 -Scan   # builds dist\ and, if Kaspersky is installed, scans it
+```
+
+- `app\WinDiag.Core`: collectors, rules, the optimization engine and the report.
+- `app\WinDiag.App`: WPF interface.
+- `app\WinDiag.Cli`: headless test tool (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`).
+- `app\WinDiag.Tests`: xUnit tests.
+- `docs\ARCHITECTURE.md`: architecture overview.
+
+## Contributing
+
+Issues and pull requests are welcome, in English or Portuguese. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 dougllascda. Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -1,0 +1,130 @@
+name: Release
+
+# Dispara ao publicar uma tag vX.Y.Z. Gera instalador, portatil e framework-dependent,
+# atesta a procedencia dos binarios e cria o Release com o trecho do CHANGELOG.
+# Passo a passo do processo: docs/RELEASING.md. Assinatura de codigo: docs/SIGNING.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write       # criar o Release e anexar arquivos
+  id-token: write       # OIDC para a atestacao de procedencia
+  attestations: write   # gravar a atestacao
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      # Segredos expostos como variaveis so para poder testar "existe?" nos passos (secrets nao valem em `if:`).
+      SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+      SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Instalar Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Conferir tag x versao
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          [xml]$props = Get-Content app/Directory.Build.props -Raw -Encoding UTF8
+          $ver = ($props.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1).Trim()
+          if ($tag -ne $ver) { throw "A tag ($tag) difere de <Version> em app/Directory.Build.props ($ver)." }
+
+      - name: Testar
+        run: dotnet test app/WinDiag.sln -c Release
+
+      # --- Assinatura opcao A: certificado .pfx em secret (signtool) -------------------------------
+      # Ativa so se SIGN_PFX_BASE64 e SIGN_PFX_PASSWORD existirem. O publish.ps1 chama WINDIAG_SIGN_CMD
+      # para cada .exe (inclusive o instalador) antes de calcular os hashes.
+      - name: Preparar assinatura (signtool)
+        if: ${{ env.SIGN_PFX_BASE64 != '' && env.SIGN_PFX_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe nao encontrado.' }
+          $cmd = '"{0}" sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "{1}" /p "{2}" "{{file}}"' -f $signtool.FullName, $pfx, $env:SIGN_PFX_PASSWORD
+          "WINDIAG_SIGN_CMD=$cmd" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # --- Assinatura opcao B: SignPath Foundation (gratis para open source) ------------------------
+      # Fluxo diferente: o SignPath assina apos o upload, entao exige separar "build" de "assinar".
+      # Depois da aprovacao do projeto, descomente e ajuste (veja docs/SIGNING.md):
+      #
+      # - uses: actions/upload-artifact@v4
+      #   id: unsigned
+      #   with:
+      #     name: unsigned
+      #     path: dist/*.exe
+      # - uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+      #     organization-id: '<ID da organizacao>'
+      #     project-slug: 'windiag'
+      #     signing-policy-slug: 'release-signing'
+      #     github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+      #     wait-for-completion: true
+      #     output-artifact-directory: dist-signed
+      #
+      # Com SignPath, regenere o SHA256SUMS.txt depois de assinar (os hashes mudam).
+
+      - name: Gerar artefatos (portatil, fx, instalador, SHA256SUMS)
+        shell: pwsh
+        run: ./publish.ps1 -SkipTests
+
+      - name: Conferir artefatos
+        shell: pwsh
+        run: |
+          Get-ChildItem dist | Format-Table Name, Length
+          $setup = Get-ChildItem dist -Filter 'WinDiag-Setup-*.exe'
+          if (-not $setup) { throw 'Instalador nao foi gerado.' }
+
+      - name: Extrair notas da versao do CHANGELOG
+        shell: pwsh
+        run: |
+          $ver = '${{ github.ref_name }}'.TrimStart('v')
+          $lines = Get-Content CHANGELOG.md -Encoding UTF8
+          $out = New-Object System.Collections.Generic.List[string]
+          $on = $false
+          foreach ($l in $lines) {
+            if ($l -match '^## ') {
+              if ($on) { break }
+              if ($l -match ('^## \[?' + [regex]::Escape($ver) + '\]?(\s|$)')) { $on = $true; continue }
+            } elseif ($on) { $out.Add($l) }
+          }
+          if ($out.Count -eq 0) { $out.Add("WinDiag $ver. See CHANGELOG.md.") }
+          $out.Add('')
+          $out.Add('Verify integrity with `SHA256SUMS.txt` and `gh attestation verify <file> --repo ${{ github.repository }}` (docs/SIGNING.md).')
+          Set-Content release-notes.md -Value $out -Encoding UTF8
+
+      - name: Atestar procedencia do build
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'dist/*.exe'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinDiag-${{ github.ref_name }}
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Criar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
