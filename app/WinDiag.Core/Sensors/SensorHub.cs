@@ -15,15 +15,25 @@ namespace WinDiag.Core.Sensors;
 /// </summary>
 public sealed class SensorHub : IDisposable
 {
+    /// <summary>Intervalo mínimo entre reavaliações do status, pois o HWiNFO pode ser aberto ou fechado com o app rodando.</summary>
     private static readonly TimeSpan StatusRefresh = TimeSpan.FromSeconds(10);
+    /// <summary>Fonte LibreHardwareMonitor, aberta no construtor.</summary>
     private readonly LhmSource _lhm = new();
+    /// <summary>Leitor ao vivo da GPU, criado só se o nvidia-smi for necessário.</summary>
     private GpuLive? _gpu;
+    /// <summary>Relógio de execução usado para controlar o intervalo de <see cref="StatusRefresh"/>.</summary>
     private readonly Stopwatch _since = Stopwatch.StartNew();
+    /// <summary>Valor de <c>_since</c> na última reavaliação do status.</summary>
     private TimeSpan _lastStatus;
+    /// <summary>true se o serviço PawnIO existe agora.</summary>
     private bool _driver;
+    /// <summary>Estado do PawnIO quando a LibreHardwareMonitor foi aberta; se mudar depois, é preciso reiniciar o app.</summary>
     private bool _driverAtOpen;
+    /// <summary>true se o HWiNFO está com a memória compartilhada válida.</summary>
     private bool _hwOk;
+    /// <summary>true depois de <see cref="Dispose"/>.</summary>
     private bool _disposed;
+    /// <summary>Último status calculado.</summary>
     private SensorStatus _status = new();
 
     /// <summary>Situação das fontes. Calculada na construção e reavaliada a cada ~10 s dentro de <see cref="Read"/> (o HWiNFO pode abrir e fechar).</summary>
@@ -53,6 +63,7 @@ public sealed class SensorHub : IDisposable
         catch (Exception) { return false; }
     }
 
+    /// <summary>Reavalia as fontes e monta as notas explicando o que está indisponível e por quê. Falhas mantêm o status anterior.</summary>
     private void RefreshStatus()
     {
         try
@@ -118,6 +129,7 @@ public sealed class SensorHub : IDisposable
             }
             catch (Exception) { }
 
+            // O nvidia-smi só entra se nenhuma fonte entregou temperatura de GPU, para não duplicar e evitar custo de processo externo.
             bool gpuTemp = groups.Any(g => g.Any(r => r.HardwareKind == HardwareClassifier.Gpu && r.Kind == SensorKind.Temperature));
             if (!gpuTemp)
             {
@@ -135,8 +147,10 @@ public sealed class SensorHub : IDisposable
         return new SensorSnapshot { Time = DateTime.Now, Readings = merged, SourcesUsed = used };
     }
 
+    /// <summary>Nome da fonte das leituras vindas do nvidia-smi.</summary>
     internal const string NvidiaSource = "nvidia-smi";
 
+    /// <summary>Alternativa via nvidia-smi quando nenhuma outra fonte trouxe a temperatura da GPU: temperatura, potência e ventoinha da primeira GPU NVIDIA.</summary>
     private List<SensorReading> ReadNvidia()
     {
         var list = new List<SensorReading>();
@@ -179,6 +193,7 @@ public sealed class SensorHub : IDisposable
         return result;
     }
 
+    /// <summary>Normaliza o nome do sensor (só letras e dígitos, minúsculas) para comparar entre fontes que escrevem "GPU Core"/"GPU core temperature" de forma diferente.</summary>
     private static string Norm(string s)
     {
         var sb = new System.Text.StringBuilder(s.Length);

@@ -1,4 +1,4 @@
-﻿using System.Management;
+using System.Management;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -18,24 +18,41 @@ public sealed class StorageCollector : ICollector
     /// <inheritdoc/>
     public string Title => Loc.T("Armazenamento", "Storage");
 
+    /// <summary>Sistemas de arquivos cujo estado de TRIM é lido do "fsutil behavior query DisableDeleteNotify".</summary>
     private static readonly string[] TrimFileSystems = { "NTFS", "ReFS" };
+    /// <summary>Namespace WMI do módulo de armazenamento do Windows (MSFT_PhysicalDisk, MSFT_StorageReliabilityCounter).</summary>
     private const string StorageNs = @"root\Microsoft\Windows\Storage";
 
+    /// <summary>Disco físico consolidado de MSFT_PhysicalDisk e Win32_DiskDrive, usado para relacionar letras de volume ao tipo de mídia.</summary>
     private sealed class Disk
     {
+        /// <summary>DeviceId do MSFT_PhysicalDisk.</summary>
         public string Id = "";
+        /// <summary>Número do disco (DeviceId convertido), igual ao de Get-Disk.</summary>
         public int Number;
+        /// <summary>Nome amigável (FriendlyName), normalmente o modelo.</summary>
         public string Name = "";
+        /// <summary>Tipo de mídia convertido do MediaType do WMI: 3 = HDD, 4 = SSD, 5 = SCM, outro = Unspecified.</summary>
         public string Media = "";      // HDD, SSD, SCM, Unspecified
+        /// <summary>Velocidade de rotação (SpindleSpeed, rpm). 0 ou 0xFFFFFFFF = desconhecida; usada para identificar HDD quando o tipo de mídia vem "Unspecified".</summary>
         public uint Spindle;
+        /// <summary>Capacidade em bytes.</summary>
         public long Size;
+        /// <summary>Código BusType do WMI (11 = SATA, 17 = NVMe, 7 = USB...). Ver <see cref="BusName"/>.</summary>
         public int Bus;
+        /// <summary>Versão do firmware informada pelo disco.</summary>
         public string Firmware = "";
+        /// <summary>Estado de saúde informado pelo WMI (HealthStatus), em texto.</summary>
         public string Health = "";
+        /// <summary>Número de série; nunca é gravado em claro no histórico (só o hash SHA-256) e é mascarado no relatório exportado.</summary>
         public string Serial = "";
+        /// <summary>PNPDeviceID do Win32_DiskDrive, usado para casar o disco com a instância S.M.A.R.T. do namespace root\wmi.</summary>
         public string Pnp = "";        // PNPDeviceID do Win32_DiskDrive (instância do dispositivo)
+        /// <summary>true se é HDD: mídia "HDD", ou, sem tipo definido, com velocidade de rotação válida (disco mecânico).</summary>
         public bool IsHdd => Media == "HDD" || (Media != "SSD" && Spindle > 0 && Spindle < uint.MaxValue);
+        /// <summary>Rótulo do tipo: NVMe (SSD no barramento 17), SSD, HDD ou o texto da mídia.</summary>
         public string Kind => Media == "SSD" ? (Bus == 17 ? "NVMe" : "SSD") : IsHdd ? "HDD" : MediaLabel;
+        /// <summary>Texto da mídia quando não é SSD nem HDD (SCM ou "indefinido").</summary>
         public string MediaLabel => Media switch { "SCM" => "SCM", "Unspecified" or "" => Loc.T("indefinido", "unspecified"), _ => Media };
     }
 
@@ -48,6 +65,7 @@ public sealed class StorageCollector : ICollector
         return res;
     }
 
+    /// <summary>Nome do barramento a partir do código BusType do MSFT_PhysicalDisk; "n/d" se desconhecido.</summary>
     private static string BusName(int b) => b switch
     {
         1 => "SCSI", 2 => "ATAPI", 3 => "ATA", 4 => "1394", 6 => "Fibre Channel", 7 => "USB", 8 => "RAID", 9 => "iSCSI",
@@ -55,11 +73,13 @@ public sealed class StorageCollector : ICollector
         17 => "NVMe", _ => Fmt.NA
     };
 
+    /// <summary>Texto de saúde a partir do HealthStatus do MSFT_PhysicalDisk (0 saudável, 1 aviso, 2 não saudável).</summary>
     private static string HealthName(long? h) => h switch
     {
         0 => Loc.T("Saudável", "Healthy"), 1 => Loc.T("Aviso", "Warning"), 2 => Loc.T("Não saudável", "Unhealthy"), _ => Fmt.NA
     };
 
+    /// <summary>Fluxo principal: discos físicos, contadores de confiabilidade, S.M.A.R.T., partições, TRIM e Steam. Cada etapa é isolada em try/catch para que uma falha não apague as demais.</summary>
     private static void CollectCore(SystemFacts facts, SectionResult res)
     {
         // --- Discos e partições (equivalente WMI de Get-PhysicalDisk / Get-Partition) ---
@@ -306,11 +326,13 @@ public sealed class StorageCollector : ICollector
         catch (Exception ex) { res.Note(Loc.T("Bibliotecas Steam: ", "Steam libraries: ") + ex.Message.Trim()); }
     }
 
+    /// <summary>Converte o valor WMI (inteiro) em caractere de letra de unidade; devolve \0 se a conversão falhar.</summary>
     private static char SafeChar(object v)
     {
         try { return (char)Convert.ToInt32(v, System.Globalization.CultureInfo.InvariantCulture); } catch (Exception) { return '\0'; }
     }
 
+    /// <summary>Lê MSStorageDriver_ATAPISmartData (atributos brutos) e MSStorageDriver_FailurePredictStatus (PredictFailure) em root\wmi. Exige administrador; sem ele a lista vem vazia e uma nota é registrada. Discos NVMe costumam não expor essas classes.</summary>
     private static List<SmartTable> ReadSmart(SystemFacts facts, SectionResult res)
     {
         var list = new List<SmartTable>();
@@ -336,8 +358,10 @@ public sealed class StorageCollector : ICollector
         return list;
     }
 
+    /// <summary>Título do grupo de partições; também usado para reencontrar o grupo ao acrescentar o TRIM.</summary>
     private static string PartTitle() => Loc.T("Partições", "Partitions");
 
+    /// <summary>Tabela de volumes locais (Win32_LogicalDisk com DriveType=3) com espaço livre. Alerta com menos de 20% livre em SSD ou menos de 10% em outros discos.</summary>
     private static void CollectPartitions(SectionResult res, Dictionary<char, Disk> letterDisk)
     {
         var g = res.Group(PartTitle());
@@ -355,6 +379,7 @@ public sealed class StorageCollector : ICollector
             var media = dk != null ? dk.Kind : "?";
             tb.AddRow(dev, v.S("FileSystem"), v.S("VolumeName"), media,
                 Fmt.Num(free, 1) + " GB", Fmt.Num(tot, 1) + " GB", Fmt.Num(pct, 1) + "%");
+            // Limiares: SSD com menos de 20% livre (regra prática: controlador precisa de área livre para gravar); demais com menos de 10%.
             if (dk?.Media == "SSD" && pct < 20)
                 res.Find(Severity.Aviso, Loc.T("Pouco espaço livre em ", "Low free space on ") + dev, Loc.T($"{Fmt.Num(pct, 1)}% livre (SSD)", $"{Fmt.Num(pct, 1)}% free (SSD)"),
                     Loc.T("SSDs ficam mais lentos nas gravações quando quase cheios (menos área para o controlador trabalhar) e o Windows tem menos espaço para cache e atualizações.", "SSDs get slower at writing when nearly full (less area for the controller to work with) and Windows has less room for cache and updates."),
@@ -369,6 +394,7 @@ public sealed class StorageCollector : ICollector
         }
     }
 
+    /// <summary>Estado do TRIM por "fsutil behavior query DisableDeleteNotify" (0 = TRIM ativo, 1 = desligado). Ferramenta externa com timeout de 10 s; falha vira nota.</summary>
     private static void CollectTrim(SectionResult res)
     {
         var r = Proc.Run(Proc.Sys32("fsutil.exe"), "behavior query DisableDeleteNotify", 10000);
@@ -391,6 +417,7 @@ public sealed class StorageCollector : ICollector
                 simple: Loc.T("Um recurso que mantém o SSD rápido por mais tempo está desligado. Pode ser religado com um comando de administrador.", "A feature that keeps the SSD fast for longer is turned off. It can be turned back on with an administrator command."));
     }
 
+    /// <summary>Localiza as bibliotecas Steam e avisa quando alguma está em HDD, relacionando a letra da unidade ao disco físico.</summary>
     private static void CollectSteam(SystemFacts facts, SectionResult res, Dictionary<char, Disk> letterDisk)
     {
         var g = res.Group(Loc.T("Bibliotecas Steam", "Steam libraries"));

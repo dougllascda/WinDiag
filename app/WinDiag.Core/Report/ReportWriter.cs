@@ -12,11 +12,13 @@ namespace WinDiag.Core.Report;
 /// </summary>
 public static class ReportWriter
 {
+    /// <summary>Aviso impresso no relatório informando que usuário e seriais foram mascarados.</summary>
     private static string MaskNotice => Loc.T("Nome de usuário e números de série foram mascarados neste arquivo.", "User name and serial numbers have been masked in this file.");
 
     /// <summary>Chave da seção "Análise da plataforma", exibida antes do resumo.</summary>
     public const string AnalysisKey = "analise";
 
+    /// <summary>Título do relatório (nome e versão do aplicativo).</summary>
     private static string ReportTitle => $"{AppInfo.Title} - {Loc.T("Relatório", "Report")}";
 
     /// <summary>Pasta padrão para exportação (Área de Trabalho, ou a pasta temporária se indisponível).</summary>
@@ -45,6 +47,9 @@ public static class ReportWriter
     /// <summary>Grava o relatório TXT (UTF-8 com BOM) em <paramref name="path"/>.</summary>
     public static void WriteTxt(ScanEngine engine, string path) => WriteFile(path, BuildTxt(engine));
 
+    /// <summary>Grava o arquivo em UTF-8 com BOM (o Bloco de Notas e navegadores antigos reconhecem os acentos) e cria a pasta de destino se preciso.</summary>
+    /// <param name="path">Caminho do arquivo.</param>
+    /// <param name="content">Conteúdo completo.</param>
     private static void WriteFile(string path, string content)
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(path));
@@ -63,11 +68,15 @@ public static class ReportWriter
         return (txt, html);
     }
 
+    /// <summary>Cópia das seções publicadas, tirada sob lock para a exportação não competir com a varredura.</summary>
+    /// <param name="e">Motor de varredura.</param>
     private static List<SectionResult> Snapshot(ScanEngine e)
     {
         lock (e.Results) return e.Results.ToList();
     }
 
+    /// <summary>true se a seção é a "Análise da plataforma".</summary>
+    /// <param name="r">Seção.</param>
     private static bool IsAnalysis(SectionResult r) =>
         string.Equals(r.Key, AnalysisKey, StringComparison.OrdinalIgnoreCase);
 
@@ -78,9 +87,13 @@ public static class ReportWriter
         return all.Where(IsAnalysis).Concat(all.Where(r => !IsAnalysis(r))).ToList();
     }
 
+    /// <summary>Texto do modo de leitura (administrador ou usuário padrão). Importa porque a leitura sem administrador é parcial.</summary>
+    /// <param name="e">Motor de varredura.</param>
     private static string Mode(ScanEngine e) =>
         e.Facts.IsAdmin ? Loc.T("Administrador (leitura completa)", "Administrator (full reading)") : Loc.T("Usuário padrão (leitura parcial)", "Standard user (partial reading)");
 
+    /// <summary>Rótulo de gravidade do relatório TXT, com largura fixa para alinhar as linhas.</summary>
+    /// <param name="s">Gravidade.</param>
     private static string Tag(Severity s) => s switch
     {
         Severity.Ok => "[  OK   ]",
@@ -89,13 +102,19 @@ public static class ReportWriter
         _ => Loc.T("[ATENÇÃO ]", "[ATTENTION]")
     };
 
+    /// <summary>Achados de AVISO ou ATENÇÃO para o diagnóstico, do mais grave e de maior impacto para o menor.</summary>
+    /// <param name="all">Todos os achados.</param>
     private static IEnumerable<Finding> Diag(IEnumerable<Finding> all) =>
         all.Where(f => f.Sev >= Severity.Aviso).OrderByDescending(f => f.Sev).ThenByDescending(f => f.Impact);
 
+    /// <summary>Sequência de espaços para alinhamento (nunca negativa).</summary>
+    /// <param name="n">Quantidade de espaços.</param>
     private static string Spaces(int n) => new(' ', Math.Max(0, n));
 
     // ---------------------------------------------------------------- TXT
 
+    /// <summary>Monta o texto do relatório TXT. As quebras de linha são CRLF para abrir corretamente no Bloco de Notas. Todo texto livre passa por <see cref="ReportMask"/>.</summary>
+    /// <param name="engine">Motor já executado.</param>
     internal static string BuildTxt(ScanEngine engine)
     {
         var results = Ordered(engine);
@@ -189,6 +208,9 @@ public static class ReportWriter
         return sb.ToString();
     }
 
+    /// <summary>Escreve uma tabela com colunas alinhadas em texto simples, com as células mascaradas e em uma linha cada.</summary>
+    /// <param name="sb">Destino.</param>
+    /// <param name="t">Tabela.</param>
     private static void WriteTable(StringBuilder sb, InfoTable t)
     {
         void L(string s) => sb.Append(s).Append("\r\n");
@@ -218,8 +240,12 @@ public static class ReportWriter
 
     // ---------------------------------------------------------------- HTML
 
+    /// <summary>Codifica texto para HTML (evita que nomes de arquivo ou mensagens do sistema quebrem ou injetem marcação no relatório).</summary>
+    /// <param name="s">Texto original; null vira vazio.</param>
     private static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
 
+    /// <summary>Classe CSS correspondente à gravidade.</summary>
+    /// <param name="s">Gravidade.</param>
     private static string SevClass(Severity s) => s switch
     {
         Severity.Ok => "ok",
@@ -228,6 +254,8 @@ public static class ReportWriter
         _ => "bad"
     };
 
+    /// <summary>Monta o HTML autocontido: estilo embutido, abas feitas só com CSS (sem JavaScript) e conteúdo mascarado. Autocontido para poder ser enviado como um arquivo único.</summary>
+    /// <param name="engine">Motor já executado.</param>
     internal static string BuildHtml(ScanEngine engine)
     {
         var results = Ordered(engine);
@@ -335,6 +363,11 @@ public static class ReportWriter
         return sb.ToString();
     }
 
+    /// <summary>Escreve uma seção (grupos, tabelas, verificações e leituras parciais) como um painel HTML.</summary>
+    /// <param name="sb">Destino.</param>
+    /// <param name="r">Seção.</param>
+    /// <param name="index">Índice do painel, usado no id.</param>
+    /// <param name="extraClass">Classes CSS adicionais.</param>
     private static void HtmlSection(StringBuilder sb, SectionResult r, int index, string extraClass)
     {
         void L(string s = "") => sb.Append(s).Append("\r\n");
@@ -384,6 +417,8 @@ public static class ReportWriter
         L("</section>");
     }
 
+    /// <summary>CSS embutido do relatório, incluindo as regras que alternam os painéis conforme o botão de aba marcado e o estilo de impressão.</summary>
+    /// <param name="tabs">Quantidade de abas.</param>
     private static string Css(int tabs)
     {
         var sb = new StringBuilder();

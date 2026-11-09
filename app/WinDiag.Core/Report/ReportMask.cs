@@ -13,12 +13,16 @@ internal static class ReportMask
     /// <summary>Marcador do nome de usuário no relatório (&lt;USUARIO&gt; em português, &lt;USER&gt; em inglês).</summary>
     public static string UserTag => Loc.T("<USUARIO>", "<USER>");
 
+    /// <summary>true se o nome de uma coluna ou rótulo indica número de série (contém "Série", "Serie" ou "Serial"). Esses valores passam por <see cref="Serial"/>.</summary>
+    /// <param name="name">Rótulo ou nome de coluna.</param>
     public static bool IsSerialName(string? name) =>
         !string.IsNullOrEmpty(name) &&
         (name.Contains("Série", StringComparison.OrdinalIgnoreCase) ||
          name.Contains("Serie", StringComparison.OrdinalIgnoreCase) ||
          name.Contains("Serial", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Oculta um número de série mostrando só os 4 últimos caracteres (até 4 caracteres viram "****"). Valores vazios ou "n/d" ficam como estão. Os 4 finais bastam para o usuário conferir o item sem expor o número inteiro.</summary>
+    /// <param name="value">Número de série.</param>
     public static string Serial(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value == Fmt.NA) return value ?? Fmt.NA;
@@ -29,6 +33,7 @@ internal static class ReportMask
     /// <summary>Marcador do nome do computador no relatório.</summary>
     public static string PcTag => "<PC>";
 
+    /// <summary>Cache do último regex de mascaramento, indexado pelos termos usados, para não recompilar a cada célula do relatório.</summary>
     private static (string Key, Regex Rx, Dictionary<string, string> Tags)? _cache;
 
     /// <summary>
@@ -72,6 +77,8 @@ internal static class ReportMask
         return c.Value.Rx.Replace(text, m => map.TryGetValue(m.Value, out var tag) ? tag : m.Value);
     }
 
+    /// <summary>Lê um valor do ambiente sem deixar exceção escapar; falha vira texto vazio (e então nada é mascarado por esse termo).</summary>
+    /// <param name="f">Leitura do ambiente.</param>
     private static string SafeEnv(Func<string> f)
     {
         try { return f() ?? ""; } catch { return ""; }
@@ -80,6 +87,9 @@ internal static class ReportMask
     /// <summary>Texto livre: apenas máscara de usuário.</summary>
     public static string Text(string? text) => User(text);
 
+    /// <summary>Valor de uma linha rótulo/valor: serial mascarado se o rótulo indicar série, e sempre com o usuário/PC mascarados.</summary>
+    /// <param name="label">Rótulo da linha.</param>
+    /// <param name="value">Valor exibido na interface.</param>
     public static string RowValue(string label, string value) =>
         IsSerialName(label) ? User(Serial(value)) : User(value);
 
@@ -95,6 +105,8 @@ internal static class ReportMask
         return r;
     }
 
+    /// <summary>Junta o texto em uma linha só, trocando quebras por espaço (necessário para tabelas alinhadas em TXT).</summary>
+    /// <param name="s">Texto original.</param>
     public static string OneLine(string? s) =>
         (s ?? "").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
 

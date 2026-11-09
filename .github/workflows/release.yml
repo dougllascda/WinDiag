@@ -43,7 +43,7 @@ jobs:
         run: dotnet test app/WinDiag.sln -c Release
 
       # --- Assinatura opcao A: certificado .pfx em secret (signtool) -------------------------------
-      # Ativa so se SIGN_PFX_BASE64 e SIGN_PFX_PASSWORD existirem. O publish.ps1 chama WINDIAG_SIGN_CMD
+      # Ativa so se SIGN_PFX_BASE64 e SIGN_PFX_PASSWORD existirem. O tools/publish.ps1 chama WINDIAG_SIGN_CMD
       # para cada .exe (inclusive o instalador) antes de calcular os hashes.
       - name: Preparar assinatura (signtool)
         if: ${{ env.SIGN_PFX_BASE64 != '' && env.SIGN_PFX_PASSWORD != '' }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Gerar artefatos (portatil, fx, instalador, SHA256SUMS)
         shell: pwsh
-        run: ./publish.ps1 -SkipTests
+        run: ./tools/publish.ps1 -SkipTests
 
       - name: Conferir artefatos
         shell: pwsh

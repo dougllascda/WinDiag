@@ -11,6 +11,9 @@ namespace WinDiag.App.Views;
 /// <summary>Janela "Sobre": logo, nome, versão, descrição, licença, repositório e nota de privacidade.</summary>
 public sealed class AboutWindow : Window
 {
+    /// <summary>Endereço do texto da licença no repositório.</summary>
+    internal const string LicenseUrl = "https://github.com/dougllascda/WinDiag/blob/main/LICENSE";
+
     /// <summary>Cria a janela modal; defina <see cref="Window.Owner"/> antes de <c>ShowDialog</c>.</summary>
     public AboutWindow()
     {
@@ -45,7 +48,7 @@ public sealed class AboutWindow : Window
 
         var desc = new TextBlock
         {
-            Text = Loc.T("Inventário de hardware, diagnóstico guiado e otimizações reversíveis para jogos no Windows.", "Hardware inventory, guided diagnostics and reversible optimizations for gaming on Windows."),
+            Text = Loc.T("Inventário de hardware, diagnóstico guiado e otimizações reversíveis para jogos e trabalho no Windows.", "Hardware inventory, guided diagnostics and reversible optimizations for gaming and work on Windows."),
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(0, 16, 0, 0)
@@ -53,7 +56,19 @@ public sealed class AboutWindow : Window
         root.Children.Add(desc);
 
         var card = new StackPanel();
-        card.Children.Add(Row(Loc.T("Licença", "License"), new TextBlock { Text = "MIT · © 2026 dougllascda" }));
+        var licenseBox = new StackPanel();
+        licenseBox.Children.Add(new TextBlock { Text = Loc.T("© 2026 dougllascda. Todos os direitos reservados.", "© 2026 dougllascda. All rights reserved."), TextWrapping = TextWrapping.Wrap });
+        var licLink = new Hyperlink(new Run(Loc.T("Licença", "License"))) { NavigateUri = SafeUri(LicenseUrl) };
+        licLink.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
+        licLink.RequestNavigate += (_, e) =>
+        {
+            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { }
+            e.Handled = true;
+        };
+        var licLinkText = new TextBlock();
+        licLinkText.Inlines.Add(licLink);
+        licenseBox.Children.Add(licLinkText);
+        card.Children.Add(Row(Loc.T("Licença", "License"), licenseBox));
         var link = new Hyperlink(new Run(AppInfo.RepoUrl)) { NavigateUri = SafeUri(AppInfo.RepoUrl) };
         link.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         link.RequestNavigate += (_, e) =>
@@ -81,6 +96,7 @@ public sealed class AboutWindow : Window
         Content = root;
     }
 
+    /// <summary>Monta uma linha "rótulo (esmaecido) + valor" em duas colunas.</summary>
     private static Grid Row(string label, UIElement value)
     {
         var g = new Grid { Margin = new Thickness(0, 2, 0, 2) };
@@ -92,6 +108,7 @@ public sealed class AboutWindow : Window
         return g;
     }
 
+    /// <summary>Só aceita http/https (o link vem de constante, mas o filtro impede abrir outro esquema); senão cai no GitHub.</summary>
     private static Uri SafeUri(string s) =>
         Uri.TryCreate(s, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp)
             ? u : new Uri("https://github.com/");

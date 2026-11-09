@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <b>English</b> | <a href="README.pt-BR.md">Português (Brasil)</a>
+  <b>English</b> | <a href="docs/pt-BR/README.pt-BR.md">Português (Brasil)</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/dougllascda/WinDiag/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/dougllascda/WinDiag"></a>
   <a href="https://github.com/dougllascda/WinDiag/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/dougllascda/WinDiag/total"></a>
   <a href="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/dougllascda/WinDiag"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-source--available-orange"></a>
   <img alt="Platform: Windows 10 | 11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
 </p>
@@ -34,6 +34,10 @@
     <td align="center"><img src="docs/assets/optimizations.png" alt="Optimizations" width="420"><br><sub>Optimizations</sub></td>
     <td align="center"><img src="docs/assets/overview-light.png" alt="Overview, light theme" width="420"><br><sub>Overview, light theme</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/overview-work.png" alt="Overview in the Work profile" width="420"><br><sub>Work profile: overview</sub></td>
+    <td align="center"><img src="docs/assets/work.png" alt="Work tab with printers and factory-installed programs" width="420"><br><sub>Work profile: printers and factory programs</sub></td>
+  </tr>
 </table>
 
 WinDiag opens already reading everything, with no "detect" button: processor, motherboard, memory, graphics card, monitors, disks (with S.M.A.R.T.), virtualization, antivirus, startup and events. Each finding comes with **what it means** and **what to do**, and the summary ranks the **likely gaming bottlenecks** by impact.
@@ -46,6 +50,7 @@ WinDiag opens already reading everything, with no "detect" button: processor, mo
 - Reversible optimizations: one switch per item, a snapshot before every change, and undo for that item alone.
 - HWiNFO-style sensors tab (current, min, max, average) with temperature, fan, VRM and disk alerts.
 - Power supply estimate with a warning if the PSU you declare looks undersized.
+- Usage profile **Gaming | Work**: the Work profile covers printers, factory-installed programs (with a recommendation and removal through the official uninstaller), laptop battery and power, Windows Update and boot time; the game tabs are hidden in the Work profile.
 - Simple mode (plain language) and Detailed mode; interface and reports in English and Brazilian Portuguese.
 - No telemetry, no network access, no runtime downloads and no runtime-generated code.
 
@@ -82,6 +87,7 @@ More details in [docs/SIGNING.md](docs/SIGNING.md).
 - **CPU, Motherboard, Memory, Graphics, Monitors, Storage, System and security:** inventory with live readings (per-thread clock, load, RAM, temperature, power, GPU clocks and PCIe link).
 - **Sensors:** current, min, max and average values. Reads from HWiNFO (with Shared Memory Support enabled) and from the bundled LibreHardwareMonitor library.
 - **Optimizations:** one switch per item. Turning it on takes a snapshot first; turning it off restores only that item. Items already set outside WinDiag (for example by AtlasOS) are shown as locked. A snapshot history can restore a whole snapshot.
+- **Usage profile (Gaming | Work):** Gaming keeps the game-focused analysis, Game session and Capture. Work shows printers, factory-installed programs (recommendation and removal through each program's official uninstaller), laptop battery and power, Windows Update and boot time, and hides the game tabs.
 - **Game session:** lists heavy background apps and closes only the ones you select.
 - **Capture:** samples CPU, GPU, DPC, disk, paging and RAM every second while you play, identifies the game process by 3D GPU load and summarizes with percentiles (P50/P95/P99).
 - **Settings:** theme (Automatic, Light, Dark), Simple/Detailed mode, language, your power supply, sensor status, data folders and licenses.
@@ -108,13 +114,17 @@ More details in [docs/SIGNING.md](docs/SIGNING.md).
 | Hypervisor (high risk) | `bcdedit /set hypervisorlaunchtype off` |
 | Forced HPET | `bcdedit /deletevalue useplatformclock` |
 | MPO (experimental) | `Dwm\OverlayTestMode` = 5 |
+| Power plan (Work profile) | desktop on Power saver → High performance; laptop on High/Ultimate performance → Balanced (reversible; only if the target plan exists) |
+| Restart print spooler | restarts the `Spooler` service (not reversible) |
+| Clear print queue | removes pending print jobs (not reversible) |
 | Temporary files | deletes files in `%TEMP%` and `C:\Windows\Temp` (not reversible) |
+| Uninstall factory-installed programs | opens the program's own official uninstaller; never silent, never automatic (not reversible) |
 
 - High-risk items ask you to type `CONFIRM` before they are applied.
-- Before every change, the previous state is saved as a JSON snapshot in `%ProgramData%\WinDiagMaint\snapshots\`; the history is in `changes.log`. Turning the switch off, or restoring a snapshot, goes back to the saved value.
+- Reversible changes save a JSON snapshot of the previous state in `%ProgramData%\WinDiagMaint\snapshots\` before they are applied; the history is in `changes.log`. Turning the switch off, or restoring a snapshot, goes back to the saved value. One-off actions (restart print spooler, clear print queue, clear temporary files) and uninstallations are not reversible, have no snapshot and always ask for confirmation.
 - No network access and no telemetry: WinDiag does not download, upload or update anything by itself.
 - No obfuscation, packer or runtime-generated code. Native calls are limited to documented Win32 APIs.
-- Gains vary by PC and game; optimizations are optional. Read more in [SECURITY.md](SECURITY.md).
+- Gains vary by PC and game; optimizations are optional. Read more in [SECURITY.md](.github/SECURITY.md).
 
 ## FAQ
 
@@ -142,10 +152,12 @@ WinDiag does not measure frame time or point to the driver responsible for DPC l
 
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
+Building from source is allowed only to evaluate the software and to prepare contributions (see [LICENSE](LICENSE)); the binaries you build must not be distributed.
+
 ```powershell
 dotnet build app\WinDiag.sln -c Debug
 dotnet test app\WinDiag.sln
-pwsh -File publish.ps1 -Scan   # builds dist\ and, if Kaspersky is installed, scans it
+pwsh -File tools\publish.ps1 -Scan   # builds dist\ and, if Kaspersky is installed, scans it
 ```
 
 - `app\WinDiag.Core`: collectors, rules, the optimization engine and the report.
@@ -156,8 +168,8 @@ pwsh -File publish.ps1 -Scan   # builds dist\ and, if Kaspersky is installed, sc
 
 ## Contributing
 
-Issues and pull requests are welcome, in English or Portuguese. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
+Issues and suggestions are welcome, in English or Portuguese. Pull requests are accepted only under the Contributor License Agreement (CLA) described in [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md). To report a vulnerability, see [.github/SECURITY.md](.github/SECURITY.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 dougllascda. Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Source-available, not open source: you may use the official releases for free on computers you own or are authorized to administer, including when giving technical support to others, as long as you do not redistribute, resell or charge for the software itself; copying, modifying, redistributing or selling the code or binaries is not allowed without written permission. © 2026 dougllascda. See [LICENSE](LICENSE). Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -14,6 +14,7 @@ public sealed class SnapshotStore
     /// <summary>Arquivo de registro de alterações.</summary>
     public string ChangeLog => System.IO.Path.Combine(DataDir, "changes.log");
 
+    /// <summary>Opções do JSON dos snapshots: indentado (legível por quem for conferir), leitura sem diferenciar maiúsculas (aceita snapshots da v7) e sem escape de acentos.</summary>
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true,
@@ -61,6 +62,8 @@ public sealed class SnapshotStore
         return m.Success && int.TryParse(m.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : 0;
     }
 
+    /// <summary>Data da última gravação do arquivo em UTC, usada como último critério de desempate; DateTime.MinValue se não puder ler.</summary>
+    /// <param name="path">Arquivo.</param>
     private static DateTime LastWriteUtc(string path)
     {
         try { return File.GetLastWriteTimeUtc(path); } catch { return DateTime.MinValue; }

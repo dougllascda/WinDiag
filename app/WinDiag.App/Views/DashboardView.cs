@@ -16,27 +16,45 @@ namespace WinDiag.App.Views;
 /// <summary>Aba "Visão geral": nota de configuração, cartões de hardware, mudanças desde a última leitura e próximos passos.</summary>
 public sealed class DashboardView : UserControl
 {
+    /// <summary>Cultura do idioma atual para formatar números.</summary>
     private static CultureInfo Pt => Loc.Culture;
+    /// <summary>Diâmetro e espessura (px) do medidor circular da nota.</summary>
     private const double GaugeSize = 150, GaugeThickness = 10;
 
+    /// <summary>Abre uma aba pela chave interna (ex.: "plan").</summary>
     private readonly Action<string> _goTo;
+    /// <summary>Cartão principal: medidor da nota e áreas que perderam pontos.</summary>
     private readonly StackPanel _hero = new();
+    /// <summary>Grade dos cartões de hardware; passa de 2 para 3 colunas em janelas largas (&gt;= 980 px).</summary>
     private readonly UniformGrid _grid = new() { Columns = 3 };
-    private readonly HwCard _cpu, _gpu, _mem, _board, _disks, _displays;
+    /// <summary>Cartões reaproveitados entre leituras; só têm o texto atualizado.</summary>
+    private readonly HwCard _cpu, _gpu, _mem, _board, _disks, _displays, _printers, _battery;
+    /// <summary>Perfil da última leitura; define o título e a regra de área dos passos.</summary>
+    private UsageProfile _profile = UsageProfile.Gaming;
+    /// <summary>Conteúdo do cartão "Desde a última leitura".</summary>
     private readonly StackPanel _diff = new();
+    /// <summary>Conteúdo do cartão "Próximos passos".</summary>
     private readonly StackPanel _next = new();
+    /// <summary>Plano de ação da última leitura.</summary>
     private List<ActionStep> _plan = new();
+    /// <summary>false até a primeira varredura terminar (mostra "Aguardando a leitura...").</summary>
     private bool _loaded;
+    /// <summary>Conteúdo do cartão "O que está bom" (modo Simples).</summary>
     private readonly StackPanel _good = new();
+    /// <summary>Conteúdo do cartão "O que melhorar e como" (modo Simples).</summary>
     private readonly StackPanel _improve = new();
+    /// <summary>Cartões de nível superior; a visibilidade deles alterna entre Simples e Detalhado.</summary>
     private readonly Border _goodCard, _improveCard, _diffCard, _nextCard;
+    /// <summary>Todas as verificações da última leitura (origem de "O que está bom" e da busca por área).</summary>
     private List<Finding> _findings = new();
 
-    /// <summary>Converte a chave interna da aba na chave da seção de dados.</summary>
+    /// <summary>Trechos que marcam o fim do codinome real em "Codinome: X (aprox...)"; o texto depois deles é descartado.</summary>
     private static readonly string[] CodenameCuts = { " (aprox", " (approx" };
 
+    /// <summary>Texto de espera, no idioma atual.</summary>
     private static string Waiting => Loc.T("Aguardando a leitura...", "Waiting for the scan...");
 
+    /// <summary>Converte a chave interna da aba na chave da seção de dados.</summary>
     private static string SectionOfTab(string tabKey) => tabKey switch
     {
         "cpu" => "cpu",
@@ -60,7 +78,7 @@ public sealed class DashboardView : UserControl
     public void ApplyMode()
     {
         ApplyVisibility();
-        foreach (var c in new[] { _cpu, _gpu, _mem, _board, _disks, _displays }) c.Render();
+        foreach (var c in new[] { _cpu, _gpu, _mem, _board, _disks, _displays, _printers, _battery }) c.Render();
         if (_loaded) BuildSimple();
     }
 
@@ -92,7 +110,10 @@ public sealed class DashboardView : UserControl
         _board = new HwCard("", "Placa-mãe", "Motherboard", "board", goTo);
         _disks = new HwCard("", "Armazenamento", "Storage", "storage", goTo);
         _displays = new HwCard("", "Monitores", "Displays", "displays", goTo);
-        foreach (var c in new[] { _cpu, _gpu, _mem, _board, _disks, _displays }) _grid.Children.Add(c);
+        _printers = new HwCard("", "Impressoras", "Printers", "trabalho", goTo);
+        _battery = new HwCard("", "Bateria", "Battery", "trabalho", goTo);
+        _printers.Visibility = _battery.Visibility = Visibility.Collapsed; // só no perfil Trabalho (definido ao fim da leitura)
+        foreach (var c in new[] { _cpu, _gpu, _mem, _board, _disks, _displays, _printers, _battery }) _grid.Children.Add(c);
 
         var heroCard = Ui.Card(_hero);
         _hero.Children.Add(Ui.Empty(Waiting));
@@ -127,6 +148,7 @@ public sealed class DashboardView : UserControl
     {
         _plan = plan;
         _loaded = true;
+        _profile = engine.Facts.Profile;
         try { BuildHero(score); } catch (Exception ex) { Fail(_hero, ex); }
         try { FillCards(engine); } catch { /* cartões mantêm o conteúdo anterior */ }
         try { BuildDiff(diff); } catch (Exception ex) { Fail(_diff, ex); }
@@ -135,6 +157,7 @@ public sealed class DashboardView : UserControl
         BuildSimple();
     }
 
+    /// <summary>Troca o conteúdo de um bloco por uma nota de falha: um bloco com erro não derruba a aba inteira.</summary>
     private static void Fail(Panel p, Exception ex)
     {
         p.Children.Clear();
@@ -143,6 +166,7 @@ public sealed class DashboardView : UserControl
 
     // ---------- Hero ----------
 
+    /// <summary>Monta o cartão principal: medidor, conceito e quanto cada área custou à nota.</summary>
     private void BuildHero(ScoreResult score)
     {
         _hero.Children.Clear();
@@ -151,6 +175,11 @@ public sealed class DashboardView : UserControl
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var left = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        var heading = UiExtra.Text(_profile == UsageProfile.Work ? Loc.T("Configuração para trabalho", "Configuration for work") : Loc.T("Configuração para jogos", "Configuration for gaming"), "TextBrush", 13, FontWeights.SemiBold);
+        heading.TextAlignment = TextAlignment.Center;
+        heading.MaxWidth = 210;
+        heading.Margin = new Thickness(0, 0, 0, 8);
+        left.Children.Add(heading);
         left.Children.Add(Gauge(score.Score));
         var grade = UiExtra.Text(score.Grade, BrushFor(score.Score), 16, FontWeights.SemiBold);
         grade.HorizontalAlignment = HorizontalAlignment.Center;
@@ -175,8 +204,10 @@ public sealed class DashboardView : UserControl
         _hero.Children.Add(g);
     }
 
+    /// <summary>Cor da nota: verde a partir de 90, destaque a partir de 75, aviso a partir de 55; abaixo disso, ruim.</summary>
     private static string BrushFor(int score) => score >= 90 ? "OkBrush" : score >= 75 ? "AccentBrush" : score >= 55 ? "WarnBrush" : "BadBrush";
 
+    /// <summary>Medidor circular em arco (0 a 100), com a cor pela faixa; os pincéis do tema acompanham a troca de tema.</summary>
     private static Grid Gauge(int score)
     {
         score = Math.Clamp(score, 0, 100);
@@ -214,6 +245,7 @@ public sealed class DashboardView : UserControl
         return host;
     }
 
+    /// <summary>Barra de uma área que perdeu pontos; clicar (ou Enter/Espaço) expande os passos que a melhoram, montados só na primeira abertura.</summary>
     private StackPanel PartBar(ScorePart p)
     {
         var outer = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -253,7 +285,14 @@ public sealed class DashboardView : UserControl
     /// <summary>Preenche o painel da nota com os passos do plano da área (título, o que fazer, ganho e botões).</summary>
     private void FillAreaPanel(StackPanel panel, string area)
     {
-        var steps = _plan.Where(s => GameScore.AreaOf(s.SectionKey) == area).OrderBy(s => s.Order).ToList();
+        // No perfil Trabalho a área é definida por achado (não por seção): resolve pela verificação de origem
+        // do passo e só usa a seção quando o passo não tem verificação correspondente.
+        string StepArea(ActionStep s)
+        {
+            var f = _findings.FirstOrDefault(x => !string.IsNullOrEmpty(s.FindingId) && x.Id == s.FindingId);
+            return f is not null ? GameScore.AreaOf(f, _profile) : GameScore.AreaOf(s.SectionKey, _profile);
+        }
+        var steps = _plan.Where(s => StepArea(s) == area).OrderBy(s => s.Order).ToList();
         var inner = new StackPanel();
         if (steps.Count == 0) inner.Children.Add(Ui.Muted(Loc.T("Nenhum passo do plano para esta área.", "No plan steps for this area."), 12.5));
         foreach (var s in steps) inner.Children.Add(StepBlock(s, showTitle: true));
@@ -292,6 +331,7 @@ public sealed class DashboardView : UserControl
 
     // ---------- Modo Simples ----------
 
+    /// <summary>Monta "O que está bom": no máximo 5 itens OK em linguagem simples, um por assunto, e depois "O que melhorar".</summary>
     private void BuildSimple()
     {
         try
@@ -333,6 +373,7 @@ public sealed class DashboardView : UserControl
         BuildImprove();
     }
 
+    /// <summary>Monta "O que melhorar e como" com os 5 primeiros passos pendentes do plano.</summary>
     private void BuildImprove()
     {
         try
@@ -359,6 +400,7 @@ public sealed class DashboardView : UserControl
         catch (Exception ex) { Fail(_improve, ex); }
     }
 
+    /// <summary>Título, valor perdido e barra proporcional (30 pontos = barra cheia); 15 ou mais usa a cor de erro.</summary>
     private static void BuildBar(StackPanel box, ScorePart p)
     {
         var head = new Grid();
@@ -386,6 +428,7 @@ public sealed class DashboardView : UserControl
 
     // ---------- Cartões de hardware ----------
 
+    /// <summary>Preenche os cartões de hardware com os dados da varredura; cada cartão é independente e lê só dados já coletados (nada de E/S aqui).</summary>
     private void FillCards(ScanEngine engine)
     {
         var f = engine.Facts;
@@ -456,10 +499,27 @@ public sealed class DashboardView : UserControl
         if (f.Displays.Count > 3) mons.Add(Loc.T($"e mais {f.Displays.Count - 3}", $"and {f.Displays.Count - 3} more"));
         if (mons.Count == 0) mons.Add(Fmt.NA);
         _displays.Set(mons, f.Displays.Count == 0 ? Loc.T("Monitor não identificado", "Display not identified") : f.Displays.Count == 1 ? Loc.T("1 monitor conectado", "1 display connected") : Loc.T(f.Displays.Count + " monitores conectados", f.Displays.Count + " displays connected"));
+
+        // Perfil Trabalho: impressoras e bateria (os cartões de hardware continuam)
+        bool work = f.Profile == UsageProfile.Work;
+        _printers.Visibility = work ? Visibility.Visible : Visibility.Collapsed;
+        _battery.Visibility = work && f.HasBattery ? Visibility.Visible : Visibility.Collapsed;
+        if (work)
+        {
+            var (pl, ps) = WorkText.Printers(f);
+            _printers.Set(pl, ps);
+            if (f.HasBattery)
+            {
+                var (bl, bs) = WorkText.Battery(f);
+                _battery.Set(bl, bs);
+            }
+        }
     }
 
+    /// <summary>Texto ou "n/d" quando vazio.</summary>
     private static string Nd(string? s) => string.IsNullOrWhiteSpace(s) ? Fmt.NA : s.Trim();
 
+    /// <summary>Nome curto do processador: tira (R)/(TM), a frequência após "@" e as palavras CPU/Processor.</summary>
     private static string ShortCpu(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return Fmt.NA;
@@ -472,6 +532,7 @@ public sealed class DashboardView : UserControl
 
     // ---------- Desde a última leitura ----------
 
+    /// <summary>Monta "Desde a última leitura": nota anterior e atual, itens resolvidos/melhorados/piorados/novos e mudanças de hardware.</summary>
     private void BuildDiff(ScanDiff? diff)
     {
         _diff.Children.Clear();
@@ -511,12 +572,14 @@ public sealed class DashboardView : UserControl
         }
     }
 
+    /// <summary>Texto "título (severidade antiga → nova)" de um achado que mudou.</summary>
     private static string SevText(FindingChange c)
     {
         static string L(Severity? s) => s.HasValue ? new Finding(s.Value, "", "").SevLabel : Fmt.NA;
         return $"{c.Title} ({L(c.OldSev)} → {L(c.NewSev)})";
     }
 
+    /// <summary>Seção de mudanças com no máximo 8 linhas; as clicáveis levam ao item na seção correspondente.</summary>
     private void AddChanges(string title, string mark, string brush, List<FindingChange> list, Func<FindingChange, string> text, bool navigate = true)
     {
         if (list.Count == 0) return;
@@ -537,6 +600,7 @@ public sealed class DashboardView : UserControl
         if (list.Count > 8) _diff.Children.Add(Ui.Muted(Loc.T($"e mais {list.Count - 8}", $"and {list.Count - 8} more")));
     }
 
+    /// <summary>Subtítulo colorido de uma lista de mudanças.</summary>
     private static TextBlock Heading(string text, string brush)
     {
         var t = UiExtra.Text(text, brush, 13, FontWeights.SemiBold);
@@ -544,6 +608,7 @@ public sealed class DashboardView : UserControl
         return t;
     }
 
+    /// <summary>Linha de texto de uma mudança.</summary>
     private static TextBlock Line(string text, string brush)
     {
         var t = UiExtra.Text(text, brush, 12.5);
@@ -597,8 +662,10 @@ public sealed class DashboardView : UserControl
     /// <summary>Cartão clicável de hardware; reaproveita os TextBlocks entre leituras.</summary>
     private sealed class HwCard : Border
     {
+        /// <summary>Linhas do cartão (a primeira em destaque).</summary>
         private readonly StackPanel _lines = new();
 
+        /// <summary>Cria o cartão; clicar nele abre a aba indicada e o mouse destaca a borda com o pincel do tema.</summary>
         public HwCard(string glyph, string ptTitle, string enTitle, string targetTab, Action<string> goTo)
         {
             var title = Loc.T(ptTitle, enTitle);
@@ -623,7 +690,9 @@ public sealed class DashboardView : UserControl
             System.Windows.Automation.AutomationProperties.SetName(this, title + Loc.T(": abrir detalhes", ": open details"));
         }
 
+        /// <summary>Linhas completas do modo Detalhado.</summary>
         private IReadOnlyList<string> _detailed = new List<string>();
+        /// <summary>Frase única do modo Simples.</summary>
         private string _simpleLine = "";
 
         /// <summary>Guarda as linhas (modo Detalhado) e a frase única (modo Simples) e redesenha.</summary>

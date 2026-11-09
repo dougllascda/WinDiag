@@ -43,6 +43,9 @@ public sealed record Finding(
     /// <summary>Explicação de 1 a 2 frases, sem jargão, para leigos.</summary>
     public string Simple { get; init; } = "";
 
+    /// <summary>Perfil a que o achado se aplica (Both = todos). Achados só de jogos têm <see cref="Model.Scope.Gaming"/>; os do perfil Trabalho, <see cref="Model.Scope.Work"/>.</summary>
+    public Scope Scope { get; init; } = Scope.Both;
+
     /// <summary>Nome de um BiosTopic com o passo a passo de BIOS relacionado, ou "".</summary>
     public string GuideTopic { get; init; } = "";
 

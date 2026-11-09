@@ -13,3 +13,8 @@ WinDiag_Relatorio_*
 
 # Versao antiga em .bat/PowerShell: mantida so localmente
 legacy/
+
+# DocFX
+docs/api/_site/
+docs/api/obj/
+docs/api/api/

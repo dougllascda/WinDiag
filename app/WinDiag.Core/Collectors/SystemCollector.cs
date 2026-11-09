@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
 
@@ -17,6 +17,7 @@ public sealed class SystemCollector : ICollector
     /// <inheritdoc/>
     public string Title => Loc.T("Sistema", "System");
 
+    /// <summary>GUID do subgrupo de processador do powercfg (estado mín./máx., EPP, parking).</summary>
     private const string PwrSet = PowerCfg.SubProcessor;
 
     /// <inheritdoc/>
@@ -33,6 +34,7 @@ public sealed class SystemCollector : ICollector
         try { bios = Wmi.First("SELECT * FROM Win32_BIOS", onError: Err); } catch { }
         try { hasBattery = Wmi.Query("SELECT * FROM Win32_Battery", onError: Err).Count > 0; } catch { }
 
+        // Versão de exibição (ex.: 23H2) e UBR (revisão de atualização cumulativa) só existem no registro, não no WMI.
         const string cvPath = @"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
         string? displayVersion = null; int? ubr = null;
         try { displayVersion = Reg.GetString(cvPath, "DisplayVersion"); ubr = Reg.GetInt(cvPath, "UBR"); } catch { res.Note(Loc.T("Registro CurrentVersion não lido", "CurrentVersion registry not read")); }
@@ -41,6 +43,7 @@ public sealed class SystemCollector : ICollector
         var bcd = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try { bcd = Bcd.Read(); } catch { }
         if (bcd.Count == 0) res.Note(Loc.T("Timers do BCD: exige administrador", "BCD timers: requires administrator"));
+        // description do BCD: o AtlasOS grava seu nome/versão nela, o que permite reconhecê-lo quando há administrador.
         bcd.TryGetValue("description", out var bcdDesc);
 
         // Fatos
@@ -88,6 +91,7 @@ public sealed class SystemCollector : ICollector
         string? chipset = null;
         try
         {
+            // O WMI não expõe o chipset diretamente; o nome do controlador LPC/eSPI no PnP traz o modelo entre parênteses (ignora siglas soltas como (R), (TM), (C)).
             var pnp = Wmi.Query("SELECT Name FROM Win32_PnPEntity WHERE Name LIKE '%LPC Controller%' OR Name LIKE '%eSPI Controller%'", onError: Err);
             if (pnp.Count > 0)
             {
@@ -107,6 +111,7 @@ public sealed class SystemCollector : ICollector
             biosDate = Fmt.ParseWmiDate(bios?.P("ReleaseDate"));
             if (biosDate is not null)
             {
+                // Idade em meses aproximados (30,44 dias por mês).
                 int mo = (int)Math.Floor((DateTime.Now - biosDate.Value).TotalDays / 30.44);
                 biosAge = Loc.T($" | {mo} meses de idade", $" | {mo} months old");
             }
@@ -146,6 +151,7 @@ public sealed class SystemCollector : ICollector
         long? pmin = null, pmax = null, epp = null, park = null, usbAC = null, aspmAC = null;
         try
         {
+            // GUIDs de configuração do powercfg: 893dee8e = estado mínimo do processador, bc5038f7 = estado máximo, 36687f9e = EPP, 0cc5b647 = núcleos ativos mínimos (parking), 48e6b7a6 = suspensão seletiva USB, ee12f906 = ASPM do PCIe. Todos lidos no esquema ativo, em CA (tomada).
             pmin = PowerCfg.Get(PwrSet, "893dee8e-2bef-41e0-89c6-b55d0929964c");
             pmax = PowerCfg.Get(PwrSet, "bc5038f7-23e0-4960-96da-33abaf5935ec");
             epp = PowerCfg.Get(PwrSet, "36687f9e-e3a5-4dbf-b1dc-15eb381c6863");
@@ -185,6 +191,7 @@ public sealed class SystemCollector : ICollector
         return res;
     }
 
+    /// <summary>Achados do coletor: AtlasOS, limite máximo do processador (abaixo de 100%), Fast Startup com uptime acima de 48 h, suspensão seletiva USB, ASPM e timers do BCD (HPET forçado, ajustes de tick). Só informa; correções ficam com o FixEngine.</summary>
     private static void Checks(SectionResult res, SystemFacts facts, Dictionary<string, string> bcd, string? bcdDesc,
         long? pmax, long? usbAC, long? aspmAC, bool fastOn, double uptimeH)
     {
@@ -214,6 +221,7 @@ public sealed class SystemCollector : ICollector
 
         // A correção HIBER desliga hibernação e Inicialização Rápida juntas; em notebook não é oferecida (quem depende de hibernar perderia o recurso).
         string hiberFix = facts.IsLaptop ? "" : "HIBER";
+        // 48 h: limiar prático do WinDiag para considerar o uptime longo com Fast Startup (o kernel não é reiniciado por "Desligar").
         if (fastOn && uptimeH > 48)
             res.Find(Severity.Aviso, Loc.T("Fast Startup com uptime longo", "Fast Startup with long uptime"), Loc.T($"{Fmt.Num(uptimeH, 1)} h sem reinício real", $"{Fmt.Num(uptimeH, 1)} h without a real restart"),
                 Loc.T("Com Fast Startup, \"Desligar\" não reinicia o kernel; drivers e serviços acumulam estado por dias. Isso pode causar degradação gradual.", "With Fast Startup, \"Shut down\" does not restart the kernel; drivers and services accumulate state for days. This can cause gradual degradation."),
@@ -271,6 +279,7 @@ public sealed class SystemCollector : ICollector
         }
     }
 
+    /// <summary>Executa a leitura e devolve null em vez de propagar exceção.</summary>
     private static string? SafeStr(Func<string?> f)
     {
         try { return f(); } catch { return null; }

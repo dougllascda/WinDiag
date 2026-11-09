@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -34,6 +34,7 @@ public sealed class SecurityCollector : ICollector
         return res;
     }
 
+    /// <summary>Estado (Running/Stopped) e modo de início (Auto/Manual/Disabled...) de todos os serviços, via WMI Win32_Service. Falha vira nota e devolve dicionário vazio.</summary>
     static Dictionary<string, (string State, string Mode)> Services(SectionResult res)
     {
         var d = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
@@ -45,9 +46,12 @@ public sealed class SecurityCollector : ICollector
         return d;
     }
 
+    /// <summary>Traduz o estado do serviço da WMI para o idioma da interface.</summary>
     static string StateTxt(string s) => s switch { "Running" => Loc.T("Em execução", "Running"), "Stopped" => Loc.T("Parado", "Stopped"), _ => s };
+    /// <summary>Traduz o modo de início do serviço da WMI para o idioma da interface.</summary>
     static string StartTxt(string s) => s switch { "Auto" => Loc.T("Automático", "Automatic"), "Manual" => Loc.T("Manual", "Manual"), "Disabled" => Loc.T("Desativado", "Disabled"), "Boot" => "Boot", "System" => Loc.T("Sistema", "System"), _ => s };
 
+    /// <summary>Hypervisor, VBS/HVCI (Win32_DeviceGuard e chave HypervisorEnforcedCodeIntegrity), serviços e recursos opcionais que usam o hypervisor e processos vmmem. Preenche HypervisorPresent, HvciRunning e HypervisorOwners em <c>SystemFacts</c>. Recursos opcionais podem exigir administrador.</summary>
     static void Virtualization(SectionResult res, SystemFacts f)
     {
         var g = res.Group(Loc.T("Virtualização e isolamento de núcleo (VBS / HVCI)", "Virtualization and core isolation (VBS / HVCI)"));
@@ -56,6 +60,7 @@ public sealed class SecurityCollector : ICollector
         var dg = Wmi.First("SELECT * FROM Win32_DeviceGuard", @"root\Microsoft\Windows\DeviceGuard", m => res.Note("VBS (Win32_DeviceGuard): " + m));
         var running = new List<int>();
         try { if (dg?.P("SecurityServicesRunning") is Array a) foreach (var x in a) running.Add(Convert.ToInt32(x)); } catch { }
+        // Códigos de SecurityServicesRunning do Win32_DeviceGuard: 1 Credential Guard, 2 HVCI, 3 System Guard, 4 medição de SMM.
         var names = new Dictionary<int, string> { [1] = "Credential Guard", [2] = Loc.T("Integridade de Memória (HVCI)", "Memory Integrity (HVCI)"), [3] = "System Guard", [4] = Loc.T("Medição de firmware SMM", "SMM firmware measurement") };
         var runNames = string.Join(", ", running.Where(x => x > 0).Select(x => names.TryGetValue(x, out var n) ? n : Loc.T("serviço ", "service ") + x));
         var hvciReg = Reg.Get(@"HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled");
@@ -84,7 +89,6 @@ public sealed class SecurityCollector : ICollector
         }
         g.Add(Loc.T("Recursos opcionais", "Optional features"), feats.Count > 0 ? string.Join(", ", feats) : null);
         if (feats.Count == 0) res.Note(Loc.T("Recursos opcionais: não listados (pode exigir administrador)", "Optional features: not listed (may require administrator)"));
-
         // Donos do hypervisor
         var owners = new List<string>();
         var ownerMap = new (string Svc, string Name)[] { ("CoworkVMService", Loc.T("Claude Desktop/Cowork (provável)", "Claude Desktop/Cowork (likely)")), ("WslService", "WSL"), ("LxssManager", "WSL"), ("vmms", "Hyper-V"), ("vmcompute", "containers/Windows Sandbox") };
@@ -142,6 +146,7 @@ public sealed class SecurityCollector : ICollector
             res.Find(Severity.Ok, Loc.T("Virtualização (VBS/hypervisor)", "Virtualization (VBS/hypervisor)"), Loc.T("Hypervisor ausente", "Hypervisor absent"), id: "seguranca.hypervisor");
     }
 
+    /// <summary>Antivírus (SecurityCenter2.AntiVirusProduct e Defender MSFT_MpComputerStatus), minifilters (fltmc filters, exige administrador), serviços SysMain/WSearch e tamanho de temporários. O WinDiag só informa; nada é desligado aqui.</summary>
     static void Security(SectionResult res, SystemFacts f)
     {
         var g = res.Group(Loc.T("Antivírus", "Antivirus"));
@@ -198,6 +203,7 @@ public sealed class SecurityCollector : ICollector
             var vendors = avF.Select(x => Filters.Describe(x.Name)).Distinct().ToList();
             var avNames = string.Join(" + ", avF.Select(x => x.Name));
             var avTxt = Loc.T($"drivers de {vendors.Count} antivírus ({avF.Count} filtros): {avNames}", $"drivers from {vendors.Count} antiviruses ({avF.Count} filters): {avNames}");
+            // Defender em modo passivo e sem tempo real: o filtro dele fica carregado, mas não varre; o custo real é do outro motor.
             bool inactiveDef = mp != null && Regex.IsMatch(mode, "Passive", RegexOptions.IgnoreCase) && !rt;
             if (vendors.Count >= 2 && inactiveDef)
                 res.Find(Severity.Info, Loc.T("Filtros de antivírus empilhados", "Stacked antivirus filters"), avTxt, Loc.T("Dois drivers de antivírus ficam carregados no sistema de arquivos, mas o do Defender está passivo (sem varredura em tempo real). O custo do filtro passivo é mínimo; o que pesa é o motor ativo.", "Two antivirus drivers are loaded in the file system, but the Defender one is passive (no real-time scanning). The cost of the passive filter is minimal; what weighs is the active engine."), id: "seguranca.av_filters");
@@ -220,6 +226,7 @@ public sealed class SecurityCollector : ICollector
         f.TempMB = tmp;
         sg.Add(Loc.T("Pastas temporárias", "Temporary folders"), Loc.T($"{Fmt.Num(tmp, 1)} MB (Temp do usuário + Windows)", $"{Fmt.Num(tmp, 1)} MB (user Temp + Windows)"));
         sg.Add(Loc.T("Cache do Windows Update", "Windows Update cache"), $"{Fmt.Num(wu, 1)} MB");
+        // Limiar de 500 MB para considerar temporários acumulados: valor prático do WinDiag (herdado da v7), não norma do Windows.
         if (tmp > 500) res.Find(Severity.Aviso, Loc.T("Temporários acumulados", "Accumulated temporary files"), $"{Fmt.Num(tmp, 1)} MB", Loc.T("Arquivos temporários acumulados ocupam espaço sem utilidade.", "Accumulated temporary files take up space needlessly."), "", "TEMP", id: "seguranca.temp",
             simple: Loc.T("Há muitos arquivos temporários acumulados ocupando espaço. Limpar libera espaço sem afetar seus arquivos pessoais.", "Many temporary files have accumulated and take up space. Cleaning them frees space without affecting your personal files."));
         else res.Find(Severity.Ok, Loc.T("Temporários", "Temporary files"), $"{Fmt.Num(tmp, 1)} MB", id: "seguranca.temp");

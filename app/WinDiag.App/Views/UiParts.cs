@@ -42,9 +42,13 @@ public sealed class HighlightOverlay : Grid
 /// <summary>Linha de verificação (achado) clicável, com detalhes expansíveis e destaque ao navegar até ela.</summary>
 public sealed class FindingRow : Border
 {
+    /// <summary>Painel com explicação, ação e botão da BIOS; recolhido/exibido ao clicar na linha.</summary>
     private readonly StackPanel _details;
+    /// <summary>Seta indicadora (ícone) que alterna entre expandido e recolhido.</summary>
     private readonly TextBlock _chevron;
+    /// <summary>false quando o achado não tem nada a mostrar além do título (a linha então não é clicável).</summary>
     private readonly bool _hasDetails;
+    /// <summary>Camada de destaque usada pela navegação a partir de outras telas.</summary>
     private readonly HighlightOverlay _flash = new();
 
     /// <summary>Id estável do achado ("" se ausente).</summary>
@@ -83,6 +87,7 @@ public sealed class FindingRow : Border
         Grid.SetColumn(text, 1);
         head.Children.Add(text);
 
+        // No modo Simples mostra a explicação leve primeiro; o texto técnico fica atrás de "ver detalhes técnicos".
         bool simple = Ui.Simple && !string.IsNullOrWhiteSpace(f.Simple);
         var tech = new StackPanel();
         AddDetail(tech, Loc.T("O que significa", "What it means"), f.Explain);
@@ -138,6 +143,7 @@ public sealed class FindingRow : Border
         if (_hasDetails) MouseLeftButtonUp += (_, _) => SetExpanded(_details.Visibility != Visibility.Visible);
     }
 
+    /// <summary>Mostra/oculta os detalhes e ajusta a seta (ícone Segoe MDL2).</summary>
     private void SetExpanded(bool show)
     {
         _details.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -158,6 +164,7 @@ public sealed class FindingRow : Border
         (FindingId.Length > 0 && string.Equals(FindingId, idOrTitle, StringComparison.OrdinalIgnoreCase))
         || string.Equals(FindingTitle, idOrTitle, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Adiciona um bloco "título: texto" aos detalhes; ignora corpo vazio.</summary>
     private static void AddDetail(StackPanel p, string title, string body)
     {
         if (string.IsNullOrWhiteSpace(body)) return;
@@ -173,6 +180,7 @@ public sealed class FindingRow : Border
 /// <summary>Seletor segmentado (um botão por opção; o selecionado usa o estilo de destaque).</summary>
 public sealed class Segmented : StackPanel
 {
+    /// <summary>Botões na ordem das opções, para poder trocar o estilo do selecionado.</summary>
     private readonly List<Button> _buttons = new();
 
     /// <summary>Cria o seletor; <paramref name="picked"/> é chamado só em escolhas do usuário.</summary>

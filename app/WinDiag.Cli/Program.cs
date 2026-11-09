@@ -10,6 +10,8 @@ using WinDiag.Core.Live;
 //
 // Uso:
 //   WinDiag.Cli --lang pt-BR|en|auto   (opção global, em qualquer posição) idioma dos textos; padrão: preferência do usuário / idioma do Windows
+//   WinDiag.Cli --profile gaming|work  (opção global, em qualquer posição) perfil de uso desta execução (não grava nas preferências)
+//   WinDiag.Cli --bloat                 programas de fábrica que a lista do WinDiag reconhece nesta máquina
 //   WinDiag.Cli --dump [arquivo.json]   varredura completa em JSON (stdout se sem arquivo); resumo por seção em stderr
 //   WinDiag.Cli --history               nota, plano de ação e diff com a última leitura gravada (não grava nada)
 //   WinDiag.Cli --live [n]              n amostras ao vivo (padrão 3), uma por segundo
@@ -18,6 +20,7 @@ using WinDiag.Core.Live;
 //   WinDiag.Cli --dry-enable ID         simula ligar a otimização ID (nada é gravado)
 //   WinDiag.Cli --dry-disable ID        simula desligar a otimização ID a partir do snapshot que a aplicou
 Console.OutputEncoding = Encoding.UTF8;
+WinDiag.Core.Model.UsageProfile? profileOverride = null;
 
 // Opção global --lang: aplica o idioma antes de qualquer outra coisa e a remove dos argumentos.
 {
@@ -26,6 +29,14 @@ Console.OutputEncoding = Encoding.UTF8;
     for (int a = 0; a < args.Length; a++)
     {
         if (args[a] == "--lang" && a + 1 < args.Length) { lang = args[++a]; continue; }
+        if (args[a] == "--profile" && a + 1 < args.Length)
+        {
+            var pv = args[++a];
+            if (pv.Equals("gaming", StringComparison.OrdinalIgnoreCase)) profileOverride = WinDiag.Core.Model.UsageProfile.Gaming;
+            else if (pv.Equals("work", StringComparison.OrdinalIgnoreCase)) profileOverride = WinDiag.Core.Model.UsageProfile.Work;
+            else { Console.Error.WriteLine("--profile: gaming|work"); Environment.Exit(1); }
+            continue;
+        }
         rest.Add(args[a]);
     }
     if (lang is not null) Loc.Set(lang);
@@ -35,6 +46,9 @@ Console.OutputEncoding = Encoding.UTF8;
     }
     args = rest.ToArray();
 }
+// Fluxo geral: as opções globais acima já foram removidas de "args"; abaixo, o primeiro argumento escolhe UM modo de execução,
+// que devolve o código de saída (0 = ok, 1 = uso incorreto/Id desconhecido, 2 = simulação de otimização falhou).
+// Saída em JSON indentado e sem escape de acentos, para ficar legível e comparável entre execuções.
 var opts = new JsonSerializerOptions
 {
     WriteIndented = true,
@@ -81,8 +95,10 @@ if (args.Length > 0 && args[0] == "--sensors")
 // --dry-disable ID        simula desligar só este item a partir do snapshot que o aplicou
 if (args.Length > 0 && (args[0] == "--fixes" || args[0] == "--dry-enable" || args[0] == "--dry-disable"))
 {
-    var engine = new ScanEngine();
+    // A varredura completa é necessária porque o estado e a aplicabilidade de cada item dependem dos fatos coletados.
+    var engine = new ScanEngine { ProfileOverride = profileOverride };
     await engine.RunAsync();
+    // dryRun: true garante que nada é alterado nem gravado (nem snapshot), mesmo nos comandos --dry-*.
     var fx = new WinDiag.Core.Fixes.FixEngine(dryRun: true);
     var statuses = fx.GetStatuses(engine.Facts);
     if (args[0] == "--fixes")
@@ -100,22 +116,40 @@ if (args.Length > 0 && (args[0] == "--fixes" || args[0] == "--dry-enable" || arg
     return res.Ok ? 0 : 2;
 }
 
+// --bloat                 lista o que o BloatwareDb classificou nesta máquina (só leitura)
+if (args.Length > 0 && args[0] == "--bloat")
+{
+    var facts = new WinDiag.Core.Model.SystemFacts();
+    var sec = new WinDiag.Core.Collectors.WorkCollector().Collect(facts);
+    Console.WriteLine(Loc.T($"{facts.Bloat.Count} programa(s) reconhecido(s) pela lista:", $"{facts.Bloat.Count} program(s) recognised by the list:"));
+    foreach (var b in facts.Bloat)
+    {
+        Console.WriteLine($"  [{WinDiag.Core.Work.BloatwareDb.Label(b.Verdict),-9}] {b.Name} | {(string.IsNullOrEmpty(b.Publisher) ? Fmt.NA : b.Publisher)}{(b.IsAppx ? " | Appx" : "")}");
+        Console.WriteLine($"      {b.Reason}");
+        if (!string.IsNullOrEmpty(b.UninstallCommand)) Console.WriteLine($"      {Loc.T("desinstalar", "uninstall")}: {b.UninstallCommand}");
+    }
+    foreach (var n in sec.Notes) Console.Error.WriteLine(Loc.T("nota: ", "note: ") + n);
+    return 0;
+}
+
 if (args.Length > 0 && args[0] == "--history")
 {
-    var engine = new ScanEngine();
+    var engine = new ScanEngine { ProfileOverride = profileOverride };
     await engine.RunAsync();
     var all = engine.AllFindings().ToList();
-    var score = WinDiag.Core.Rules.GameScore.Compute(all);
+    var prof = engine.Facts.Profile;
+    var score = WinDiag.Core.Rules.GameScore.Compute(all, prof, engine.WorkReadingsPartial);
     Console.WriteLine(Loc.T($"Nota: {score.Score}/100 ({score.Grade})", $"Score: {score.Score}/100 ({score.Grade})"));
     Console.WriteLine(score.Summary);
     foreach (var pt in score.Parts) Console.WriteLine($"  -{pt.Lost,2}  {pt.Area}: {pt.Reason}");
     Console.WriteLine();
     Console.WriteLine(Loc.T("Plano de ação:", "Action plan:"));
-    foreach (var st in WinDiag.Core.Rules.ActionPlan.Build(all))
+    foreach (var st in WinDiag.Core.Rules.ActionPlan.Build(all, prof))
         Console.WriteLine($"  {st.Order}. [{st.Cost}] {st.Title} | {Loc.T("Onde", "Where")}: {st.Where} | {st.What} | {Loc.T("Ganho", "Gain")}: {st.Gain}");
     Console.WriteLine();
     var prev = WinDiag.Core.History.ScanHistory.LoadLatest();
     if (prev is null) { Console.WriteLine(Loc.T("Sem leitura anterior em ", "No previous scan in ") + WinDiag.Core.History.ScanHistory.DefaultDir); return 0; }
+    // Compare + Summarize (em vez de RecordAndCompare) para não gravar um novo arquivo no histórico.
     var d = WinDiag.Core.History.ScanHistory.Compare(prev, WinDiag.Core.History.ScanHistory.Summarize(engine));
     Console.WriteLine(Loc.T($"Comparação com {Fmt.DateTime(prev.When)}: nota {d.PreviousScore} -> {d.CurrentScore}", $"Comparison with {Fmt.DateTime(prev.When)}: score {d.PreviousScore} -> {d.CurrentScore}"));
     void Show(string name, IEnumerable<WinDiag.Core.History.FindingChange> l) { foreach (var c in l) Console.WriteLine($"  {name}: {c.Title} ({c.OldSev?.ToString() ?? "-"} -> {c.NewSev?.ToString() ?? "-"})"); }
@@ -127,8 +161,9 @@ if (args.Length > 0 && args[0] == "--history")
 
 if (args.Length > 0 && args[0] == "--dump")
 {
-    var engine = new ScanEngine();
+    var engine = new ScanEngine { ProfileOverride = profileOverride };
     await engine.RunAsync();
+    // JSON em stdout (ou no arquivo informado); o resumo por seção vai para stderr para não misturar com o JSON.
     var dump = new { engine.Facts, Sections = engine.Results };
     var json = JsonSerializer.Serialize(dump, opts);
     if (args.Length > 1) File.WriteAllText(args[1], json, new UTF8Encoding(false));
@@ -139,7 +174,7 @@ if (args.Length > 0 && args[0] == "--dump")
     return 0;
 }
 
-Console.Error.WriteLine(Loc.T("uso: WinDiag.Cli [--lang pt-BR|en|auto] --dump [arquivo.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID",
-    "usage: WinDiag.Cli [--lang pt-BR|en|auto] --dump [file.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID"));
+Console.Error.WriteLine(Loc.T("uso: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [arquivo.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID",
+    "usage: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [file.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID"));
 return 1;
 

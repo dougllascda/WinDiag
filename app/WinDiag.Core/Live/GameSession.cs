@@ -41,14 +41,17 @@ public static class GameSession
     /// <summary>Aviso exibido para claude/node.</summary>
     public static string ClaudeWarning => Loc.T("é o assistente Claude; fechar encerra a conversa", "it is the Claude assistant; closing it ends the conversation");
 
+    /// <summary>Processos que nunca aparecem na lista: núcleo do Windows, shell, terminais, o Defender, serviços da NVIDIA e áudio. Fechá-los desestabilizaria a sessão ou não liberaria RAM útil.</summary>
     private static readonly Regex Exclude = new(
         @"^(Idle|System|Registry|smss|csrss|wininit|winlogon|services|lsass|svchost|explorer|dwm|fontdrvhost|sihost|ctfmon|SearchHost|StartMenuExperienceHost|ShellExperienceHost|TextInputHost|RuntimeBroker|audiodg|conhost|powershell|pwsh|WindowsTerminal|cmd|vmmem.*|MsMpEng|nvcontainer|NVDisplay\.Container|NVIDIA Web Helper|nvsphelper64|RtkAudUService64)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>Antivírus de terceiros (Kaspersky, Defender, Avast, AVG, ESET, Bitdefender, Norton, McAfee). Excluídos para não reduzir a proteção do usuário; sufixo "#N" é a numeração de instâncias do contador.</summary>
     private static readonly Regex AvProc = new(
         @"^(avp|avpui|MsMpEng|MpDefenderCoreService|AvastSvc|AVGSvc|ekrn|bdservicehost|vsserv|NortonSecurity|mcshield|mfemms)(#\d+)?$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>Aplicativos de segundo plano conhecidos (navegadores, Discord, launchers, mensageiros, editores) oferecidos mesmo fora dos 8 maiores consumidores.</summary>
     private static readonly Regex BgApp = new(
         @"^(msedge|msedgewebview2|chrome|firefox|opera|brave|Discord|steamwebhelper|OneDrive|Teams|ms-teams|Spotify|CurseForge|Overwolf|EpicGamesLauncher|EpicWebHelper|Battle\.net|EADesktop|Code|Antigravity|language_server.*|Gemini|claude|WhatsApp|Telegram)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -77,6 +80,7 @@ public static class GameSession
         {
             int session = 0;
             try { using var self = Process.GetCurrentProcess(); session = self.SessionId; } catch (Exception) { /* usa a sessão 0 */ }
+            // Agrupa por nome: navegadores e Electron criam dezenas de processos; o usuário decide por aplicativo, não por processo.
             var groups = new Dictionary<string, (List<int> Pids, double Bytes, string? Path)>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in Process.GetProcesses())
             {
@@ -198,9 +202,11 @@ public static class GameSession
         return res;
     }
 
+    /// <summary>user32!GetForegroundWindow: janela em primeiro plano (IntPtr.Zero se nenhuma).</summary>
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
+    /// <summary>user32!GetWindowThreadProcessId: devolve o thread dono da janela e, em <c>processId</c>, o PID do processo.</summary>
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
@@ -249,24 +255,30 @@ public static class GameSession
         catch { return null; }
     }
 
+    /// <summary>Nome do processo pelo PID, ou null se não existe mais ou não pode ser lido.</summary>
     private static string? NameOfPid(int? pid)
     {
         if (pid is null) return null;
         try { using var p = Process.GetProcessById(pid.Value); return p.ProcessName; } catch { return null; }
     }
 
+    /// <summary>true se o processo ainda está em execução (atualiza o estado antes de consultar).</summary>
     private static bool Alive(Process p)
     {
         try { p.Refresh(); return !p.HasExited; } catch { return false; }
     }
 
+    /// <summary>Espelho da estrutura MEMORYSTATUSEX da Win32 (bytes, exceto dwMemoryLoad em %).</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryStatusEx
     {
+        /// <summary>Tamanho da estrutura (preenchido antes da chamada) e percentual de memória em uso.</summary>
         public uint dwLength, dwMemoryLoad;
+        /// <summary>RAM física, arquivo de paginação, memória virtual e virtual estendida (total/disponível), em bytes.</summary>
         public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
     }
 
+    /// <summary>kernel32!GlobalMemoryStatusEx: estado da memória. Não exige administrador.</summary>
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx lpBuffer);

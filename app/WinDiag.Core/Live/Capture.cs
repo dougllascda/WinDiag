@@ -92,6 +92,7 @@ public static class Capture
 {
     /// <summary>Durações oferecidas na interface, em segundos.</summary>
     public static readonly int[] DurationOptions = { 30, 60, 120, 300 };
+    /// <summary>Extrai o PID do nome de instância do contador "GPU Engine" (formato pid_N_luid_..._engtype_...).</summary>
     private static readonly Regex PidRx = new(@"pid_(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>Percentil por posto mais próximo (ceil(p/100*n)-1), ignorando nulos e NaN; 0 se não houver valores.</summary>
@@ -249,6 +250,7 @@ public static class Capture
             r.Interpretation.Add(Loc.T("Poucas amostras para concluir. Tente novamente.", "Too few samples to conclude. Try again."));
             return r;
         }
+        // Limiares de interpretação: CPU P95 >= 85% (CPU limitante) com GPU < 85%; GPU P95 >= 95% (GPU limitante); disco P95 >= 90%; paginação P95 >= 500 págs/s; DPC P95 >= 3% ou máx. >= 10%; temperatura CPU >= 95 °C / GPU >= 87 °C. São regras práticas do WinDiag, não normas de fabricante; as frases evitam afirmar causa.
         double P(Func<CaptureSample, double?> f, double p) => Percentile(s.Select(f), p);
         double Mx(Func<CaptureSample, double?> f) { var v = s.Select(f).Where(x => x.HasValue).Select(x => x!.Value).ToList(); return v.Count == 0 ? 0 : v.Max(); }
         double cpuP95 = P(x => x.CpuPct, 95), gpuP95 = P(x => x.Gpu3DPct, 95);
@@ -302,37 +304,54 @@ public static class Capture
 
     // ---------------------------------------------------------------------------------------------
 
+    /// <summary>Espelho da estrutura MEMORYSTATUSEX da Win32 (bytes, exceto dwMemoryLoad em %).</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryStatusEx
     {
+        /// <summary>Tamanho da estrutura (preenchido antes da chamada) e percentual de memória em uso.</summary>
         public uint dwLength, dwMemoryLoad;
+        /// <summary>RAM física, arquivo de paginação, memória virtual e virtual estendida (total/disponível), em bytes.</summary>
         public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
     }
 
+    /// <summary>kernel32!GlobalMemoryStatusEx: usada para a RAM disponível. Não exige administrador.</summary>
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx lpBuffer);
 
+    /// <summary>Leitor dos contadores de desempenho da captura. Os contadores de taxa precisam de <see cref="Prime"/> antes da primeira <see cref="Read"/>, pois a primeira leitura sempre vale 0. Contadores que não existem ficam null e o campo da amostra fica sem valor.</summary>
     private sealed class Reader : IDisposable
     {
+        /// <summary>Contadores: CPU total, DPC, interrupções (Processor Information), tempo ocioso e fila do disco (PhysicalDisk) e páginas lidas por segundo (Memory).</summary>
         private PerformanceCounter? _cpu, _dpc, _int, _idle, _queue, _pages;
+        /// <summary>Contadores "GPU Adapter Memory": uso dedicado e compartilhado, um por adaptador; vale o maior valor.</summary>
         private readonly List<PerformanceCounter> _vramDed = new(), _vramShr = new();
+        /// <summary>Categoria "GPU Engine" (uso por processo e por motor); null se o Windows não a expõe.</summary>
         private PerformanceCounterCategory? _gpuEng;
+        /// <summary>Amostras brutas anteriores do GPU Engine, necessárias para calcular a taxa entre duas leituras.</summary>
         private Dictionary<string, CounterSample> _prevEng = new();
+        /// <summary>true se a leitura do GPU Engine falhou ou não existe; a GPU 3D e o jogo deixam de ser medidos.</summary>
         private bool _engFailed;
 
+        /// <summary>PID do processo do jogo na amostra anterior (para detectar troca de jogo).</summary>
         private int _gamePid;
+        /// <summary>Nome do processo do jogo na amostra anterior.</summary>
         private string? _gameName;
+        /// <summary>Tempo de CPU acumulado do jogo na amostra anterior.</summary>
         private TimeSpan _lastCpuTime;
+        /// <summary>Instante (UTC) da amostra anterior de CPU do jogo; default = ainda sem referência.</summary>
         private DateTime _lastCpuAt;
+        /// <summary>Contador "Page Faults/sec" da instância do processo do jogo.</summary>
         private PerformanceCounter? _gamePf;
 
+        /// <summary>Cria um contador; devolve null se a categoria/contador não existir (nomes localizados, serviço desligado).</summary>
         private static PerformanceCounter? Mk(string cat, string ctr, string? inst)
         {
             try { return inst is null ? new PerformanceCounter(cat, ctr, true) : new PerformanceCounter(cat, ctr, inst, true); }
             catch (Exception) { return null; }
         }
 
+        /// <summary>Cria os contadores e faz a leitura de escorva (a primeira de um contador de taxa é sempre 0).</summary>
         public void Prime()
         {
             _cpu = Mk("Processor Information", "% Processor Time", "_Total");
@@ -361,11 +380,13 @@ public static class Capture
             ReadEngines(out _, out _); // guarda a primeira amostra bruta
         }
 
+        /// <summary>Próximo valor do contador, arredondado a uma casa; null se o contador é nulo ou falhar.</summary>
         private static double? Next(PerformanceCounter? c)
         {
             try { return c is null ? null : Math.Round(c.NextValue(), 1); } catch (Exception) { return null; }
         }
 
+        /// <summary>Lê uma amostra de 1 s. Cada campo falha de forma independente e fica null.</summary>
         public CaptureSample Read(int second)
         {
             var s = new CaptureSample { Second = second };
@@ -400,8 +421,10 @@ public static class Capture
             return s;
         }
 
+        /// <summary>Limita percentuais ao intervalo 0 a 100 (contadores podem passar de 100 por arredondamento).</summary>
         private static double? Clamp(double? v) => v.HasValue ? Math.Max(0, Math.Min(100, v.Value)) : null;
 
+        /// <summary>Soma o uso do motor 3D de todos os processos (exceto o WinDiag) e identifica o PID de maior uso, a partir da diferença entre duas amostras brutas do GPU Engine.</summary>
         private void ReadEngines(out double? total, out int? topPid)
         {
             total = null; topPid = null;
@@ -435,6 +458,7 @@ public static class Capture
             catch (Exception) { _engFailed = true; }
         }
 
+        /// <summary>Mede o processo do jogo: working set, CPU (diferença do tempo de CPU / tempo decorrido / nº de threads) e page faults/s. Zera as referências quando o jogo muda.</summary>
         private void ReadGame(int pid, CaptureSample s)
         {
             try
@@ -466,6 +490,7 @@ public static class Capture
             catch { }
         }
 
+        /// <summary>Acha o contador "Page Faults/sec" do PID: nomes de instância repetem para processos homônimos ("jogo#1"), então confere "ID Process" para escolher a instância certa.</summary>
         private static PerformanceCounter? FindPageFaultCounter(int pid, string name)
         {
             try
@@ -485,6 +510,7 @@ public static class Capture
             return null;
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             foreach (var c in new[] { _cpu, _dpc, _int, _idle, _queue, _pages, _gamePf }) { try { c?.Dispose(); } catch { } }

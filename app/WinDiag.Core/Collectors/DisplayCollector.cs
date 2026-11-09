@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -18,26 +18,43 @@ public sealed class DisplayCollector : ICollector
     /// <inheritdoc/>
     public string Title => Loc.T("Monitores", "Displays");
 
+    /// <summary>Dados de um monitor lidos do namespace root\wmi (EDID): nome, ano, tamanho e tecnologia de saída.</summary>
     private sealed class WmiMon
     {
+        /// <summary>InstanceName do WmiMonitorID (DISPLAY\FABRICANTE\...), usado para casar com o monitor do GDI.</summary>
         public string Instance = "";
+        /// <summary>Fabricante + nome amigável decodificados do EDID.</summary>
         public string Name = "";
+        /// <summary>Ano de fabricação do EDID (YearOfManufacture); null se 0 ou ausente.</summary>
         public int? Year;
+        /// <summary>Diagonal em polegadas, calculada das dimensões do EDID em cm (hipotenusa / 2,54). null se o EDID não informa.</summary>
         public double? Inches;
+        /// <summary>Código VideoOutputTechnology de WmiMonitorConnectionParams.</summary>
         public long? Tech;
+        /// <summary>true depois de associado a um monitor do GDI, para não ser reutilizado.</summary>
         public bool Used;
     }
 
+    /// <summary>Monitor consolidado a partir do GDI, do QueryDisplayConfig e do WMI.</summary>
     private sealed class Mon
     {
+        /// <summary>Monitor ativo visto pelo GDI (base da lista).</summary>
         public GdiMonitor G = null!;
+        /// <summary>Dados do EDID/WMI casados com este monitor; null se não houve correspondência.</summary>
         public WmiMon? W;
+        /// <summary>Caminho ativo do QueryDisplayConfig (taxa exata e tecnologia de saída).</summary>
         public ConfigPath? Cfg;
+        /// <summary>Modo de vídeo em uso agora (resolução e taxa inteira).</summary>
         public GdiMode? Mode;
+        /// <summary>Todos os modos que o driver oferece para este monitor.</summary>
         public List<GdiMode> Modes = new();
+        /// <summary>Nome exibido, em ordem de preferência: EDID/WMI, nome amigável do caminho, descrição do GDI ou "Monitor N".</summary>
         public string Name = "";
+        /// <summary>Taxa de atualização usada (a fracionária do QueryDisplayConfig quando coincide com a do GDI).</summary>
         public double Hz;
+        /// <summary>Taxas distintas suportadas na resolução atual, em ordem crescente.</summary>
         public List<double> Supported = new();
+        /// <summary>Maior taxa suportada na resolução atual (ou a atual, se maior).</summary>
         public double MaxHz;
     }
 
@@ -149,6 +166,7 @@ public sealed class DisplayCollector : ICollector
                        : !string.IsNullOrWhiteSpace(m.Cfg?.FriendlyName) ? m.Cfg!.FriendlyName
                        : !string.IsNullOrWhiteSpace(m.G.MonitorString) ? m.G.MonitorString
                        : Loc.T("Monitor ", "Display ") + idx;
+                // Usa a taxa fracionária só se coincidir (±1 Hz) com a do modo GDI; caso contrário o caminho pode ser de outro monitor/modo.
                 m.Hz = m.Cfg is { Hz: > 0 } c && m.Mode is not null && Math.Abs(c.Hz - m.Mode.Hz) <= 1.0 ? c.Hz : (m.Mode?.Hz ?? 0);
                 if (m.Mode is not null)
                 {
@@ -238,6 +256,7 @@ public sealed class DisplayCollector : ICollector
         return res;
     }
 
+    /// <summary>Lê WmiMonitorID, WmiMonitorBasicDisplayParams e WmiMonitorConnectionParams (root\wmi) e junta por InstanceName. Falhas viram nota; devolve o que foi lido.</summary>
     private static List<WmiMon> ReadWmi(SectionResult res)
     {
         const string ns = @"root\wmi";
@@ -255,6 +274,7 @@ public sealed class DisplayCollector : ICollector
                 var c = cps.FirstOrDefault(x => string.Equals(x.S("InstanceName"), inst, StringComparison.OrdinalIgnoreCase));
                 double? inches = null;
                 var hs = b?.D("MaxHorizontalImageSize"); var vs = b?.D("MaxVerticalImageSize");
+                // Dimensões do EDID vêm em centímetros; diagonal = hipotenusa / 2,54 (cm para polegadas).
                 if (hs is > 0 && vs is not null) inches = Math.Sqrt(hs.Value * hs.Value + vs.Value * vs.Value) / 2.54;
                 int? year = (int?)m.L("YearOfManufacture");
                 var name = $"{DecodeWmi(m.P("ManufacturerName"))} {DecodeWmi(m.P("UserFriendlyName"))}".Trim();

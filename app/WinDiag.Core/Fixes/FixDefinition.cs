@@ -86,6 +86,16 @@ public sealed class FixDefinition
     public bool Temp { get; init; }
     /// <summary>Ação especial: desativar itens de inicialização escolhidos pelo usuário.</summary>
     public bool StartupApps { get; init; }
+    /// <summary>Perfil a que o item se aplica (Both = todos). A interface filtra por este campo; <see cref="FixEngine.GetStatuses"/> devolve tudo.</summary>
+    public Scope Scope { get; init; } = Scope.Both;
+    /// <summary>true = ação pontual (não é um interruptor): executada por <see cref="FixEngine.RunAction"/>, sem desfazer.</summary>
+    public bool IsAction { get; init; }
+    /// <summary>Ação especial: trocar o plano de energia ativo para o recomendado ao trabalho (powercfg /setactive), guardando o GUID anterior.</summary>
+    public bool PowerPlan { get; init; }
+    /// <summary>Ação pontual: reiniciar o serviço Spooler.</summary>
+    public bool SpoolerRestart { get; init; }
+    /// <summary>Ação pontual: parar o Spooler, apagar os arquivos da fila de impressão e iniciar o Spooler.</summary>
+    public bool PrintQueueClear { get; init; }
 
     /// <summary>Rótulo do risco no idioma atual (Baixo/Médio/Alto ou Low/Medium/High).</summary>
     public string RiskLabel => Risk switch

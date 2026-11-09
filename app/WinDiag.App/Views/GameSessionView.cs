@@ -8,12 +8,19 @@ namespace WinDiag.App.Views;
 /// <summary>Aba "Sessão de jogo": lista apps pesados e fecha só os que o usuário marcar.</summary>
 public sealed class GameSessionView : UserControl
 {
+    /// <summary>Lista de apps candidatos, um CheckBox por app.</summary>
     private readonly StackPanel _list = new();
+    /// <summary>Texto da RAM disponível (antes/depois do fechamento).</summary>
     private readonly TextBlock _ramText;
+    /// <summary>Linha de status/resultado da operação atual.</summary>
     private readonly TextBlock _status;
+    /// <summary>Botão que refaz a lista de apps pesados.</summary>
     private readonly Button _refresh = new() { Content = Loc.T("Atualizar lista", "Refresh list"), Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(0, 0, 8, 0) };
+    /// <summary>Botão que pede o fechamento dos apps marcados.</summary>
     private readonly Button _close = new() { Content = Loc.T("Fechar selecionados", "Close selected"), Padding = new Thickness(16, 6, 16, 6) };
+    /// <summary>Caixa de seleção de cada app e o app correspondente.</summary>
     private readonly List<(CheckBox Box, HeavyApp App)> _items = new();
+    /// <summary>true durante listagem ou fechamento; evita operações simultâneas.</summary>
     private bool _busy;
 
     /// <summary>Monta a aba de sessão de jogo.</summary>
@@ -44,8 +51,10 @@ public sealed class GameSessionView : UserControl
         Loaded += async (_, _) => { if (_items.Count == 0) await RefreshAsync(); };
     }
 
+    /// <summary>Formata MB como GB com uma casa, ou "n/d".</summary>
     private static string Ram(double? mb) => mb.HasValue ? Fmt.Num(mb.Value / 1024d, 1) + " GB" : Fmt.NA;
 
+    /// <summary>Lista os apps pesados fora da UI thread (enumerar processos é lento) e reconstrói a lista.</summary>
     private async Task RefreshAsync()
     {
         if (_busy) return;
@@ -82,6 +91,7 @@ public sealed class GameSessionView : UserControl
         SetBusy(false, "");
     }
 
+    /// <summary>Confirma e pede o fechamento normal (sem forçar) dos apps marcados; a operação roda em thread de fundo.</summary>
     private async Task CloseSelectedAsync()
     {
         if (_busy) return;
@@ -109,6 +119,7 @@ public sealed class GameSessionView : UserControl
         await RefreshAfterCloseAsync(res?.AvailAfterMB, res?.AvailBeforeMB);
     }
 
+    /// <summary>Atualiza a lista depois de fechar preservando a mensagem de resultado e a RAM antes/depois, que a nova listagem apagaria.</summary>
     private async Task RefreshAfterCloseAsync(double? after, double? before)
     {
         var keepStatus = _status.Text;
@@ -119,6 +130,7 @@ public sealed class GameSessionView : UserControl
         _status.Text = keepStatus;
     }
 
+    /// <summary>Alterna o estado ocupado: desabilita os botões e define o texto de status.</summary>
     private void SetBusy(bool busy, string status)
     {
         _busy = busy;

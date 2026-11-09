@@ -5,18 +5,21 @@ namespace WinDiag.Core.Util;
 /// <summary>Itens de inicialização (chaves Run/Run32 e pastas Inicializar) com o estado de StartupApproved. Fonte: registro e sistema de arquivos; não exige administrador.</summary>
 public static class Startup
 {
+    /// <summary>Subchave (relativa a HKCU/HKLM) onde o Gerenciador de Tarefas guarda o estado ligado/desligado dos itens de inicialização.</summary>
     const string ApBase = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved";
 
     /// <summary>Primeiro byte ímpar = desabilitado (03...); par = habilitado (02...). Sem dados = habilitado.</summary>
     public static bool IsEnabled(byte[]? approved)
         => approved is null || approved.Length == 0 || (approved[0] & 1) == 0;
 
+    /// <summary>Lê o valor binário de StartupApproved e converte no estado habilitado/desabilitado.</summary>
     static bool StateOf(string apPath, string valueName) => IsEnabled(Reg.Get(apPath, valueName) as byte[]);
 
     /// <summary>Lê os itens de inicialização. Locais ilegíveis são ignorados.</summary>
     public static List<StartupItem> Read()
     {
         var items = new List<StartupItem>();
+        // Cada chave Run tem sua subchave espelho em StartupApproved (Run32 para a visão WOW6432Node).
         var runKeys = new (string Path, string Loc, string Ap)[]
         {
             (@"HKCU:\Software\Microsoft\Windows\CurrentVersion\Run", "HKCU Run", @"HKCU:\" + ApBase + @"\Run"),
@@ -39,6 +42,7 @@ public static class Startup
             }
             catch { }
         }
+        // Pastas Inicializar do usuário e comum a todos; o estado fica em StartupApproved\StartupFolder, indexado pelo nome do arquivo.
         var folders = new (Environment.SpecialFolder F, string Ap)[]
         {
             (Environment.SpecialFolder.Startup, @"HKCU:\" + ApBase + @"\StartupFolder"),
@@ -52,6 +56,7 @@ public static class Startup
                 if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
                 foreach (var f in new DirectoryInfo(dir).EnumerateFiles())
                 {
+                    // desktop.ini é metadado da pasta, não um programa.
                     if (f.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
                     items.Add(new StartupItem
                     {

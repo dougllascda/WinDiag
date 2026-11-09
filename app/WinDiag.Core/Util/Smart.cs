@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -36,6 +36,7 @@ public sealed record SmartTable(string Instance, bool Predict, Dictionary<int, S
 /// <summary>Decodificação do S.M.A.R.T. bruto (ATA) e histórico de leituras para detectar atributos que crescem. Fonte: WMI root\wmi (exige administrador); o histórico fica em %ProgramData%\WinDiagMaint\smart_history.json.</summary>
 public static class Smart
 {
+    /// <summary>Opções do JSON do histórico: indentado para facilitar inspeção manual.</summary>
     private static readonly JsonSerializerOptions HistoryJson = new() { WriteIndented = true };
 
     /// <summary>Nomes em pt-BR dos atributos exibidos.</summary>
@@ -47,6 +48,7 @@ public static class Smart
         [199] = "CRC UDMA", [231] = "Vida restante (SSD)", [233] = "Média de wearout", [241] = "Total gravado (LBAs)"
     };
 
+    /// <summary>Versão em inglês de <see cref="Names"/>.</summary>
     private static readonly Dictionary<int, string> NamesEn = new()
     {
         [5] = "Reallocated", [9] = "Power-on hours", [12] = "Power cycles", [177] = "Wear (SSD)",
@@ -76,6 +78,7 @@ public static class Smart
     {
         var attrs = new Dictionary<int, SmartAttr>();
         if (vs is null) return attrs;
+        // Layout ATA SMART: 2 bytes de revisão, depois até 30 blocos de 12 bytes: [0]=ID, [3]=valor normalizado, [4]=pior, [5..10]=bruto de 48 bits (little-endian). ID 0 = bloco vazio.
         for (int i = 2; i + 11 < vs.Length && i < 362; i += 12)
         {
             int id = vs[i];
@@ -128,6 +131,7 @@ public static class Smart
             }
         }
         var pending = Enumerable.Range(0, disks.Count).Where(d => result[d] is null).ToList();
+        // Segunda passada (por modelo): só atribui quando há exatamente um candidato e nenhum outro disco pendente disputa a mesma instância.
         var plan = new List<(int Disk, int Inst)>();
         foreach (var d in pending)
         {
@@ -166,6 +170,7 @@ public static class Smart
         {
             if (!File.Exists(f)) return h;
             var bytes = File.ReadAllBytes(f);
+            // O histórico da versão em PowerShell foi gravado com BOM UTF-8, que o JsonDocument rejeita; descarta o BOM.
             int skip = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
             using var doc = JsonDocument.Parse(new ReadOnlyMemory<byte>(bytes, skip, bytes.Length - skip));
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return h;
@@ -189,6 +194,7 @@ public static class Smart
         return h;
     }
 
+    /// <summary>Lê um número inteiro opcional do JSON; ausente ou de outro tipo vira null (entradas antigas/corrompidas não derrubam a leitura).</summary>
     private static long? Num(JsonElement e, string name)
     {
         if (!e.TryGetProperty(name, out var v)) return null;

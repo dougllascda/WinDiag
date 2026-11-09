@@ -10,8 +10,11 @@ namespace WinDiag.Core;
 /// </summary>
 public static class Loc
 {
+    /// <summary>Cultura de formatação para português do Brasil.</summary>
     private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-BR");
+    /// <summary>Cultura de formatação para inglês (EUA).</summary>
     private static readonly CultureInfo En = CultureInfo.GetCultureInfo("en-US");
+    /// <summary>Idioma atual. <c>volatile</c> porque os coletores rodam em threads de segundo plano e leem o valor enquanto a interface pode alterá-lo. Começa no idioma do Windows.</summary>
     private static volatile bool _isPt = ResolveAuto();
 
     /// <summary>true quando o idioma atual é português (Brasil).</summary>
@@ -39,6 +42,7 @@ public static class Loc
     /// <param name="en">Texto em inglês.</param>
     public static string T(string pt, string en) => _isPt ? pt : en;
 
+    /// <summary>Decide o idioma pelo idioma de interface do Windows: português se for "pt" (qualquer região), inglês nos demais casos.</summary>
     private static bool ResolveAuto() =>
         CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("pt", StringComparison.OrdinalIgnoreCase);
 }

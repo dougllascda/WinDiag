@@ -1,0 +1,44 @@
+name: Docs
+
+# Publica a documentacao de desenvolvedor (DocFX) no GitHub Pages.
+# O dono do repositorio precisa ativar uma unica vez:
+#   Settings > Pages > Build and deployment > Source: GitHub Actions
+# URL esperada: https://dougllascda.github.io/WinDiag/
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: windows-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Instalar DocFX
+        run: dotnet tool install -g docfx
+      - name: Gerar o site
+        run: docfx docs/api/docfx.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/api/_site
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4

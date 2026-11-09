@@ -12,6 +12,7 @@ internal sealed class LhmSource : IDisposable
 {
     /// <summary>Nome da fonte nas leituras.</summary>
     internal const string SourceName = "LibreHardwareMonitor";
+    /// <summary>Instância da biblioteca; null antes de <see cref="Open"/> e depois de <see cref="Dispose"/>.</summary>
     private Computer? _pc;
 
     /// <summary>true se a biblioteca abriu e está lendo.</summary>
@@ -79,6 +80,7 @@ internal sealed class LhmSource : IDisposable
         return list;
     }
 
+    /// <summary>Atualiza uma peça e suas sub-peças (ex.: Super I/O dentro da placa-mãe) e acumula as leituras. A categoria da peça raiz é herdada pelas filhas que não se identificam.</summary>
     private static void Visit(IHardware hw, string rootName, string rootKind, List<SensorReading> list)
     {
         try { hw.Update(); } catch (Exception) { return; }
@@ -95,11 +97,13 @@ internal sealed class LhmSource : IDisposable
         }
     }
 
+    /// <summary>Categoria da peça raiz, usada como alternativa para as sub-peças.</summary>
     private static string ParentKind(IHardware hw) => KindOf(hw, HardwareClassifier.Other);
 
     /// <summary>Categoria em pt-BR pelo tipo da peça informado pela biblioteca.</summary>
     internal static string KindOf(IHardware hw, string fallback)
     {
+        // Nome do enum em vez do valor: tolera versões da biblioteca que acrescentam ou removem tipos.
         switch (hw.HardwareType.ToString())
         {
             case "Cpu": return HardwareClassifier.Cpu;
@@ -120,6 +124,7 @@ internal sealed class LhmSource : IDisposable
         }
     }
 
+    /// <summary>Normaliza um sensor da biblioteca para tipo e unidade do WinDiag. NaN/infinito e tipos desconhecidos são descartados. A comparação usa o nome do enum (ToString) para não depender de valores numéricos que mudam entre versões da biblioteca.</summary>
     private static (SensorKind Kind, double Value, string Unit)? Convert(ISensor s)
     {
         if (s.Value is not { } f) return null;
@@ -138,6 +143,7 @@ internal sealed class LhmSource : IDisposable
             case "SmallData": return (SensorKind.Data, v, "MB");
             case "Control": return (SensorKind.Other, v, "%");
             case "Level": return (SensorKind.Other, v, "%");
+            // A biblioteca reporta bytes/s; converte para MB/s (decimal).
             case "Throughput": return (SensorKind.Other, v / 1_000_000d, "MB/s");
             case "Frequency": return (SensorKind.Other, v, "Hz");
             case "Flow": return (SensorKind.Other, v, "L/h");

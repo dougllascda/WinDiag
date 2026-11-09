@@ -1,14 +1,30 @@
 # Contribuindo com o WinDiag
 
-[English](CONTRIBUTING.md) | **Português (Brasil)**
+[English](../../.github/CONTRIBUTING.md) | **Português (Brasil)**
 
-Obrigado pelo interesse. Este guia resume como compilar, testar e estender o projeto. A visão geral do código está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em inglês). Ao participar, você concorda em seguir o [Código de Conduta](CODE_OF_CONDUCT.md) (em inglês). Issues e pull requests em português ou inglês são bem-vindos.
+Obrigado pelo interesse. Este guia resume como compilar, testar e estender o projeto. A visão geral do código está em [docs/ARCHITECTURE.md](../ARCHITECTURE.md) (em inglês). O WinDiag tem código visível sob a [Licença do WinDiag](LICENSE.pt-BR.md) (versão em inglês: [LICENSE](../../LICENSE)); não é código aberto. Issues e sugestões em português ou inglês são bem-vindas; pull requests só são aceitos sob o Contrato de Licença de Contribuidor abaixo. Em caso de divergência, vale a versão em inglês, em [.github/CONTRIBUTING.md](../../.github/CONTRIBUTING.md).
+
+## Issues e sugestões
+
+Relatos de bugs, ideias e dúvidas são bem-vindos como issues no GitHub. Informe a versão do WinDiag, a versão do Windows e, em caso de bug, o que você esperava e o que aconteceu. Para problemas de segurança, veja [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
+
+## Contrato de Licença de Contribuidor (CLA)
+
+Ao enviar uma contribuição (pull request, patch, código, texto, tradução ou qualquer outro material) para este repositório, você concorda com o seguinte:
+
+1. **Autoria.** Você declara ser o autor da contribuição, ou ter o direito de enviá-la, e que ela não viola direitos de terceiros.
+2. **Cessão.** Você cede e transfere a dougllascda todos os direitos patrimoniais sobre a contribuição, na máxima extensão permitida em lei.
+3. **Licença subsidiária.** Onde a cessão não for possível ou válida pela lei aplicável, você concede a dougllascda uma licença perpétua, mundial, irrevogável, gratuita e exclusiva para usar, reproduzir, modificar, distribuir e explorar a contribuição de qualquer forma, com direito de sublicenciar.
+4. **Sem obrigação.** dougllascda não tem obrigação de usar, manter ou publicar sua contribuição e decide sozinho o que entra no projeto.
+5. **Sem remuneração.** A contribuição é feita sem pagamento.
+
+Se você não concorda, não envie um pull request; abra uma issue. O modelo de pull request pede a confirmação deste contrato.
 
 ## Requisitos
 
 - Windows 10 ou 11 (o app lê WMI, registro e contadores de desempenho do Windows).
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
-- PowerShell 7 (`pwsh`) ou Windows PowerShell 5.1, para o `publish.ps1`.
+- PowerShell 7 (`pwsh`) ou Windows PowerShell 5.1, para o `tools\publish.ps1`.
 
 ## Compilar e testar
 
@@ -17,7 +33,7 @@ dotnet build app\WinDiag.sln -c Debug
 dotnet test app\WinDiag.sln
 ```
 
-O build em Debug usa o manifesto `asInvoker` (sem UAC). O Release pede administrador ao abrir. Corrija todos os erros e avisos novos antes de enviar.
+O build em Debug usa o manifesto `asInvoker` (sem UAC). O Release pede administrador ao abrir. Corrija todos os erros e avisos novos antes de enviar. Compilar localmente é permitido apenas para avaliar o software e preparar contribuições sob o CLA; não distribua os binários gerados (veja a Licença do WinDiag).
 
 ## CLI de teste
 
@@ -39,7 +55,7 @@ Rode em um terminal como administrador para ver as leituras completas.
 - **Tom sóbrio e técnico.** Nada de "100% seguro". **Não afirme causa sem medição**: descreva o que foi lido e o que isso pode indicar.
 - **Comentários XML** (`///`) em tipos e membros públicos.
 - **Coletores são somente leitura** e nunca derrubam o app. Cada leitura em `try/catch`; falha vira nota (ex.: "exige administrador") e o campo mostra `n/d`.
-- **Toda alteração no sistema passa pelo `FixEngine`**, com snapshot em `%ProgramData%\WinDiagMaint\snapshots` e desfazer.
+- **Toda alteração no sistema passa pelo `FixEngine`.** As alterações reversíveis salvam antes um snapshot em `%ProgramData%\WinDiagMaint\snapshots` e têm desfazer. Ações pontuais (reiniciar spooler, limpar fila de impressão, limpar temporários) e desinstalações (que só abrem o desinstalador do próprio programa, nunca em modo silencioso) não têm snapshot, mas sempre pedem confirmação.
 - Processos externos (`nvidia-smi`, `powercfg`, `bcdedit`, `fltmc`) via `Util.Proc`: timeout e sem janela.
 - Não use ofuscação, packer, download em tempo de execução, `Reflection.Emit` ou código gerado em runtime. P/Invoke documentado da Win32 é permitido.
 - Não mascare dados na interface; o mascaramento de usuário e seriais vale só para o relatório exportado.
@@ -73,13 +89,13 @@ As regras ficam em `app\WinDiag.Core\Rules\` e trabalham sobre `SystemFacts` e o
 ## Como publicar
 
 ```powershell
-pwsh -File publish.ps1                # testa e gera dist\
-pwsh -File publish.ps1 -SkipTests     # só gera dist\
-pwsh -File publish.ps1 -Scan          # e varre dist\ com o Kaspersky, se instalado
+pwsh -File tools\publish.ps1                # testa e gera dist\
+pwsh -File tools\publish.ps1 -SkipTests     # só gera dist\
+pwsh -File tools\publish.ps1 -Scan          # e varre dist\ com o Kaspersky, se instalado
 ```
 
-Saída em `dist\`: `WinDiag-Setup-<versão>.exe`, `WinDiag-Portable-<versão>.exe`, `WinDiag-<versão>-fx.exe` e `SHA256SUMS.txt`. O processo de release está em [docs/RELEASING.md](docs/RELEASING.md) (em inglês).
+Saída em `dist\`: `WinDiag-Setup-<versão>.exe`, `WinDiag-Portable-<versão>.exe`, `WinDiag-<versão>-fx.exe` e `SHA256SUMS.txt`. O processo de release está em [docs/RELEASING.md](../RELEASING.md) (em inglês).
 
 ## Pull requests
 
-Descreva o que mudou e como validou (comandos e resultado). Mantenha mudanças pequenas e focadas, e atualize o `CHANGELOG.md` quando houver impacto para o usuário. O modelo de pull request traz uma lista de verificação.
+Descreva o que mudou e como validou (comandos e resultado). Mantenha mudanças pequenas e focadas, e atualize o `CHANGELOG.md` quando houver impacto para o usuário. O modelo de pull request traz uma lista de verificação, incluindo a confirmação do CLA. O titular decide o que é incorporado.

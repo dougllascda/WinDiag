@@ -13,25 +13,46 @@ namespace WinDiag.App.Views;
 /// <summary>Aba "Configurações": aparência, modo, idioma, fonte (PSU), sensores, dados e sobre.</summary>
 public sealed class SettingsView : UserControl
 {
+    /// <summary>Rótulos do seletor de tema, na ordem de <see cref="ThemeMode"/> (o índice vira o valor do enum).</summary>
     private static readonly string[] ThemeLabels = { Loc.T("Automático", "Automatic"), Loc.T("Claro", "Light"), Loc.T("Escuro", "Dark") };
+    /// <summary>Rótulos do seletor Simples/Detalhado (índice 0 = Simples).</summary>
     private static readonly string[] ModeLabels = { Loc.T("Simples", "Simple"), Loc.T("Detalhado", "Detailed") };
+    /// <summary>Rótulos do seletor de idioma, alinhados a <see cref="LangCodes"/>.</summary>
     private static readonly string[] LangLabels = { Loc.T("Automático", "Automatic"), "Português", "English" };
+    /// <summary>Códigos gravados em <c>UserPrefs.Language</c>; "Auto" segue o idioma do Windows.</summary>
     private static readonly string[] LangCodes = { "Auto", "pt-BR", "en" };
 
+    /// <summary>Refaz a varredura (usado ao salvar a fonte).</summary>
     private readonly Func<Task> _rescan;
+    /// <summary>Seletor de tema; sincronizado com <see cref="ThemeManager.Changed"/> caso o tema mude por outro caminho.</summary>
     private readonly Segmented _theme;
+    /// <summary>Seletor Simples/Detalhado; sincronizado com <see cref="Ui.ModeChanged"/>.</summary>
     private readonly Segmented _mode;
+    /// <summary>Seletor de perfil Jogos/Trabalho; sincronizado com <see cref="ProfileUi.Changed"/>.</summary>
+    private readonly Segmented _profile;
+    /// <summary>Rótulos do seletor de perfil.</summary>
+    private static readonly string[] ProfileLabels = { Loc.T("Jogos", "Gaming"), Loc.T("Trabalho", "Work") };
+    /// <summary>Campo da potência da fonte (somente dígitos, validado também ao salvar).</summary>
     private readonly TextBox _watts = new() { Width = 90, MaxLength = 4, HorizontalAlignment = HorizontalAlignment.Left };
+    /// <summary>Campo opcional do modelo da fonte.</summary>
     private readonly TextBox _model = new() { Width = 260, MaxLength = 60, HorizontalAlignment = HorizontalAlignment.Left };
+    /// <summary>Mensagem de resultado do bloco "Minha fonte".</summary>
     private readonly TextBlock _psuMsg = new() { Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
+    /// <summary>Mensagem de resultado do bloco "Dados" (também usada em erros de reinício).</summary>
     private readonly TextBlock _dataMsg = new() { Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
 
+    /// <summary>Pasta do histórico de leituras (scan_*.json) usada pela comparação "desde a última leitura".</summary>
     private static string HistoryDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDiag", "history");
 
+    /// <summary>Consulta ao estado dos sensores feita pela janela principal (true = detectar de novo); nula se indisponível.</summary>
     private readonly Func<bool, Task<SensorStatus?>>? _sensorStatus;
+    /// <summary>Contêiner das linhas de estado dos sensores.</summary>
     private readonly StackPanel _sensorBox = new();
+    /// <summary>Botão "Verificar de novo"; desabilitado durante a consulta.</summary>
     private Button? _sensorRecheck;
+    /// <summary>true depois da primeira consulta; ela só ocorre quando a aba fica visível (evita custo ao abrir o app).</summary>
     private bool _sensorsChecked;
+    /// <summary>true durante a consulta, para não disparar duas ao mesmo tempo.</summary>
     private bool _sensorsBusy;
 
     /// <summary>Cria a aba; <paramref name="rescan"/> refaz a varredura (usado ao salvar a fonte); <paramref name="sensorStatus"/> lê o estado dos sensores (true = detectar de novo).</summary>
@@ -41,6 +62,15 @@ public sealed class SettingsView : UserControl
         _sensorStatus = sensorStatus;
         var prefs = Prefs.Read();
         var root = new StackPanel();
+
+        // Perfil de uso (a janela principal refaz a leitura ao receber ProfileUi.Changed)
+        _profile = new Segmented(ProfileLabels, ProfileUi.IsWork ? 1 : 0, i => ProfileUi.Set(i == 1 ? WinDiag.Core.Model.UsageProfile.Work : WinDiag.Core.Model.UsageProfile.Gaming));
+        ProfileUi.Changed += () => _profile.Select(ProfileUi.IsWork ? 1 : 0);
+        var profileBody = new StackPanel();
+        profileBody.Children.Add(Labeled(Loc.T("Uso do PC", "PC use"), _profile));
+        profileBody.Children.Add(Ui.Muted(Loc.T("Jogos mostra GPU, PCIe, monitores, sessão de jogo e captura. Trabalho mostra impressoras, programas de fábrica, bateria, atualizações e inicialização. Ao trocar, a leitura é refeita.",
+            "Gaming shows GPU, PCIe, displays, game session and capture. Work shows printers, factory-installed programs, battery, updates and startup. Changing it runs the scan again.")));
+        root.Children.Add(Block("Perfil de uso", "Usage profile", profileBody));
 
         // Aparência
         _theme = new Segmented(ThemeLabels, (int)ThemeManager.Mode, i => ThemeManager.SetMode((ThemeMode)i));
@@ -97,6 +127,7 @@ public sealed class SettingsView : UserControl
         Content = root;
     }
 
+    /// <summary>Idioma já gravado nesta sessão, para ignorar reescolha do mesmo valor.</summary>
     private string _langCode = "Auto";
 
     /// <summary>Grava o idioma escolhido e oferece reiniciar agora (a nova instância pode pedir o UAC de novo).</summary>
@@ -124,6 +155,7 @@ public sealed class SettingsView : UserControl
         }
     }
 
+    /// <summary>Bloco de configuração: cartão com título (e glossário) e conteúdo.</summary>
     private static Border Block(string ptTitle, string enTitle, UIElement content)
     {
         var sp = new StackPanel();
@@ -132,6 +164,7 @@ public sealed class SettingsView : UserControl
         return Ui.Card(sp);
     }
 
+    /// <summary>Linha "rótulo + controle" em duas colunas.</summary>
     private static Grid Labeled(string label, UIElement control)
     {
         var g = new Grid { Margin = new Thickness(0, 4, 0, 4) };
@@ -145,6 +178,7 @@ public sealed class SettingsView : UserControl
         return g;
     }
 
+    /// <summary>Valida a potência (150 a 2000 W), grava via <see cref="Prefs.Update"/> e refaz a varredura, pois o diagnóstico de fonte depende desse valor.</summary>
     private async Task SavePsuAsync(Button save)
     {
         string raw = _watts.Text.Trim();
@@ -178,12 +212,14 @@ public sealed class SettingsView : UserControl
         finally { save.IsEnabled = true; }
     }
 
+    /// <summary>Mostra uma mensagem colorida pela chave de pincel do tema.</summary>
     private static void Say(TextBlock t, string text, string brushKey)
     {
         t.Text = text;
         t.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
     }
 
+    /// <summary>Monta o bloco de sensores; a consulta real só ocorre quando a aba é exibida pela primeira vez.</summary>
     private StackPanel BuildSensors()
     {
         var sp = new StackPanel();
@@ -195,6 +231,7 @@ public sealed class SettingsView : UserControl
         return sp;
     }
 
+    /// <summary>Consulta HWiNFO, LibreHardwareMonitor e o driver em segundo plano e preenche as linhas; falhas viram mensagem, nunca exceção.</summary>
     private async Task CheckSensorsAsync(bool recheck)
     {
         if (_sensorsBusy || _sensorStatus == null) return;
@@ -233,6 +270,7 @@ public sealed class SettingsView : UserControl
         }
     }
 
+    /// <summary>Monta o bloco de dados: pastas de histórico, logs e preferências, com ações de abrir e limpar.</summary>
     private StackPanel BuildData()
     {
         var sp = new StackPanel();
@@ -254,6 +292,7 @@ public sealed class SettingsView : UserControl
         return sp;
     }
 
+    /// <summary>Abre uma pasta no Explorer, criando-a se não existir.</summary>
     private void OpenFolder(string dir)
     {
         try
@@ -264,6 +303,7 @@ public sealed class SettingsView : UserControl
         catch (Exception ex) { Say(_dataMsg, Loc.T("Não foi possível abrir a pasta: ", "Could not open the folder: ") + ex.Message, "WarnBrush"); }
     }
 
+    /// <summary>Apaga só os scan_*.json do histórico, depois de confirmar; snapshots de otimizações não são tocados.</summary>
     private void ClearHistory()
     {
         if (!ConfirmDialog.Ask(Window.GetWindow(this), "WinDiag", Loc.T("Limpar o histórico de leituras?", "Clear the scan history?"),
@@ -290,11 +330,13 @@ public sealed class SettingsView : UserControl
         }
     }
 
+    /// <summary>Monta o bloco "Sobre": versão, licença, repositório e avisos de terceiros.</summary>
     private StackPanel BuildAbout()
     {
         var sp = new StackPanel();
         sp.Children.Add(Ui.LabelValue(Loc.T("Versão", "Version"), AppInfo.Version));
-        sp.Children.Add(Ui.LabelValue(Loc.T("Licença", "License"), "MIT"));
+        sp.Children.Add(Ui.LabelValue(Loc.T("Licença", "License"), Loc.T("© 2026 dougllascda. Todos os direitos reservados.", "© 2026 dougllascda. All rights reserved.")));
+        sp.Children.Add(Labeled(Loc.T("Texto da licença", "License text"), LicenseLink()));
 
         var link = new Hyperlink(new Run(AppInfo.RepoUrl));
         if (Uri.TryCreate(AppInfo.RepoUrl, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp))
@@ -315,6 +357,22 @@ public sealed class SettingsView : UserControl
         return sp;
     }
 
+    /// <summary>Link da licença; só abre o URL fixo do repositório.</summary>
+    private static TextBlock LicenseLink()
+    {
+        var link = new Hyperlink(new Run(Loc.T("Licença", "License"))) { NavigateUri = new Uri(AboutWindow.LicenseUrl) };
+        link.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
+        link.RequestNavigate += (_, e) =>
+        {
+            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { /* sem navegador padrão */ }
+            e.Handled = true;
+        };
+        var t = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        t.Inlines.Add(link);
+        return t;
+    }
+
+    /// <summary>Abre o arquivo THIRD-PARTY-NOTICES ao lado do executável ou, se não houver, mostra um resumo embutido.</summary>
     private void ShowNotices()
     {
         foreach (var name in new[] { "THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-NOTICES.md", "THIRD-PARTY-NOTICES" })
@@ -329,11 +387,11 @@ public sealed class SettingsView : UserControl
             catch { /* sem programa associado: mostra o texto embutido */ }
         }
         MessageBox.Show(Window.GetWindow(this),
-            Loc.T("O WinDiag é distribuído sob a licença MIT.\n\n" +
+            Loc.T("© 2026 dougllascda. Todos os direitos reservados.\n\n" +
             "Usa o .NET (Microsoft, licença MIT) e os pacotes System.Management, System.Diagnostics.PerformanceCounter (Microsoft, MIT) e CommunityToolkit.Mvvm (.NET Foundation, MIT). " +
             "Os ícones vêm da fonte Segoe Fluent Icons / Segoe MDL2 Assets do próprio Windows.\n\n" +
             "O arquivo THIRD-PARTY-NOTICES completo não foi encontrado ao lado do executável.",
-            "WinDiag is distributed under the MIT license.\n\n" +
+            "© 2026 dougllascda. All rights reserved.\n\n" +
             "It uses .NET (Microsoft, MIT license) and the packages System.Management, System.Diagnostics.PerformanceCounter (Microsoft, MIT) and CommunityToolkit.Mvvm (.NET Foundation, MIT). " +
             "The icons come from the Segoe Fluent Icons / Segoe MDL2 Assets font that ships with Windows.\n\n" +
             "The full THIRD-PARTY-NOTICES file was not found next to the executable."),

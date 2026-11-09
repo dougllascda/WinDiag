@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -21,16 +21,23 @@ namespace WinDiag.App;
 /// <summary>Janela principal: cabeçalho, abas por seção, barra de status e exportação do relatório.</summary>
 public partial class MainWindow : Window, IDisposable
 {
+    /// <summary>Cultura do idioma atual para formatar números.</summary>
     private static CultureInfo Pt => Loc.Culture;
 
     /// <summary>Uma aba: ícone, rótulo, chaves de seção exibidas e conteúdo.</summary>
     private sealed class Page
     {
+        /// <summary>Ícone (Segoe MDL2), rótulo traduzido, chave interna estável e rótulo em português (chave do glossário).</summary>
         public string Icon = "", Label = "", Key = "", PtLabel = "";
+        /// <summary>Chaves das seções de dados exibidas nesta aba.</summary>
         public string[] Keys = Array.Empty<string>();
+        /// <summary>Aba de Resumo (recalculada a cada seção) / aba de controle próprio, sem seções de dados.</summary>
         public bool IsSummary, IsPlaceholder;
+        /// <summary>Indicador "Lendo..." mostrado até todas as seções da aba chegarem.</summary>
         public StackPanel Loading = new();
+        /// <summary>Conteúdo das seções (recriado a cada atualização).</summary>
         public StackPanel Body = new();
+        /// <summary>Cartão "Ao vivo" opcional, atualizado pelo timer de 1 s.</summary>
         public LiveCard? Live;
         /// <summary>Aba com controle próprio (Otimizações, Sessão de jogo, Captura).</summary>
         public Func<FrameworkElement>? View;
@@ -41,13 +48,24 @@ public partial class MainWindow : Window, IDisposable
     /// <summary>Abas visíveis no modo Simples (as demais aparecem só no modo Detalhado), identificadas pela chave interna estável.</summary>
     private static readonly HashSet<string> SimpleTabs = new()
     {
-        "overview", "plan", "optimizations", "session", "sensors", "settings"
+        "overview", "plan", "optimizations", "session", "sensors", "work", "settings"
     };
 
+    /// <summary>Rótulos do seletor Simples/Detalhado do cabeçalho.</summary>
     private static readonly string[] ModeLabels = { Loc.T("Simples", "Simple"), Loc.T("Detalhado", "Detailed") };
+    /// <summary>Seletor do cabeçalho; sincronizado em <see cref="OnModeChanged"/> quando o modo muda por outra tela.</summary>
     private Segmented? _modeSeg;
 
-    private static bool IsPageVisible(Page p) => !Ui.Simple || SimpleTabs.Contains(p.Key);
+    /// <summary>true se o perfil ativo oculta a aba (Sessão de jogo e Captura no Trabalho; Trabalho fora do perfil Trabalho).</summary>
+    private static bool IsHiddenByProfile(Page p) => p.Key switch
+    {
+        "session" or "capture" => ProfileUi.IsWork,
+        "work" => !ProfileUi.IsWork,
+        _ => false
+    };
+
+    /// <summary>Regra única de visibilidade da aba: perfil primeiro, depois o modo Simples/Detalhado.</summary>
+    private static bool IsPageVisible(Page p) => !IsHiddenByProfile(p) && (!Ui.Simple || SimpleTabs.Contains(p.Key));
 
     /// <summary>Mostra/oculta as abas conforme o modo; se a aba atual sumir, volta para a Visão geral.</summary>
     private void ApplyModeToTabs()
@@ -69,6 +87,7 @@ public partial class MainWindow : Window, IDisposable
             foreach (var p in _pages.Where(x => !x.IsPlaceholder && !x.IsSummary)) RefreshPage(_engine, p);
             RefreshSummary();
         }
+        _work?.Refresh();
         _dashboard?.ApplyMode();
         _plan?.RefreshView();
     }
@@ -82,12 +101,18 @@ public partial class MainWindow : Window, IDisposable
         int i = _pages.FindIndex(p => p.Keys.Contains(sectionKey));
         if (i < 0) i = _pages.FindIndex(p => p.IsSummary);
         if (i < 0) return;
+        if (IsHiddenByProfile(_pages[i]))
+        {
+            i = _pages.FindIndex(p => p.IsSummary);
+            if (i < 0) return;
+        }
         if (!IsPageVisible(_pages[i])) Ui.SetSimple(false);
         var page = _pages[i];
         Tabs.SelectedIndex = i;
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() => ScrollToTarget(page, findingId)));
     }
 
+    /// <summary>Rola até o achado (ou ao topo) depois que a aba destino fez o layout; roda em ContextIdle para o BringIntoView ter medidas válidas.</summary>
     private void ScrollToTarget(Page page, string? findingId)
     {
         if (_closed || page.Tab?.Content is not ScrollViewer sv) return;
@@ -109,6 +134,7 @@ public partial class MainWindow : Window, IDisposable
         }));
     }
 
+    /// <summary>Procura, na árvore lógica, a linha de achado que corresponde ao id ou título.</summary>
     private static FindingRow? FindRow(DependencyObject root, string id)
     {
         if (root is FindingRow r && r.Matches(id)) return r;
@@ -134,6 +160,7 @@ public partial class MainWindow : Window, IDisposable
         return _queued ??= RunQueuedAsync();
     }
 
+    /// <summary>Espera a varredura em curso e dispara uma nova, evitando varreduras simultâneas (fila de no máximo 1).</summary>
     private async Task RunQueuedAsync()
     {
         try { await _current; } catch { /* a falha da varredura anterior não impede a nova */ }
@@ -142,6 +169,7 @@ public partial class MainWindow : Window, IDisposable
         await BeginScan();
     }
 
+    /// <summary>Inicia a varredura e guarda a Task, para que a fila saiba quando ela termina.</summary>
     private Task BeginScan() => _current = StartScanAsync();
 
     /// <summary>Marca o início de uma operação de otimização/inicialização/snapshot: Reler (F5) fica desabilitado até o <see cref="EndBusy"/> correspondente.</summary>
@@ -161,24 +189,88 @@ public partial class MainWindow : Window, IDisposable
     /// <summary>Disparado ao fim de cada varredura completa.</summary>
     public event Action<ScanEngine>? ScanCompleted;
 
+    /// <summary>Abas na ordem de exibição.</summary>
     private readonly List<Page> _pages = new();
+    /// <summary>Amostrador dos contadores ao vivo (CPU, memória, GPU); descartado no fechamento.</summary>
     private readonly LiveSampler _sampler = new();
+    /// <summary>Timer de 1 s que dispara a amostragem ao vivo.</summary>
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    /// <summary>Varredura mais recente, de onde as abas leem resultados e fatos.</summary>
     private ScanEngine? _engine;
+    /// <summary>Cancela a varredura em curso no fechamento da janela.</summary>
     private CancellationTokenSource? _cts;
+    /// <summary>Cronômetro da duração da leitura exibida na barra de status.</summary>
     private Stopwatch _sw = new();
+    /// <summary>Quantidade de seções esperadas (usada no "Lendo N de M").</summary>
     private int _total;
+    /// <summary>true enquanto uma amostra ao vivo está em curso; evita acumular leituras lentas.</summary>
     private bool _sampling;
+    /// <summary>true durante a varredura (UI thread); os fatos só são "completos" quando volta a false.</summary>
     private bool _scanning;
+    /// <summary>Contador de operações em curso (otimizações etc.); enquanto maior que 0, o Reler fica desabilitado.</summary>
     private int _busyCount;
+    /// <summary>Task da varredura atual.</summary>
     private Task _current = Task.CompletedTask;
+    /// <summary>Varredura enfileirada para depois da atual, se houver.</summary>
     private Task? _queued;
+    /// <summary>true durante a exportação do relatório.</summary>
     private bool _exporting;
+    /// <summary>true depois do fechamento: tarefas e eventos atrasados checam isso e saem sem tocar na interface.</summary>
     private bool _closed;
+    /// <summary>Abas descartáveis (sensores, captura...), descartadas no fechamento para soltar timers e eventos.</summary>
     private readonly List<IDisposable> _disposableViews = new();
+    /// <summary>Assinaturas de <see cref="ScanCompleted"/> feitas por esta janela, removidas no descarte.</summary>
     private readonly List<Action<ScanEngine>> _scanHandlers = new();
+    /// <summary>Visão geral, criada sob demanda pela fábrica da aba.</summary>
     private DashboardView? _dashboard;
+    /// <summary>Plano de ação, criado sob demanda.</summary>
     private PlanView? _plan;
+    /// <summary>Aba Trabalho, criada sob demanda.</summary>
+    private WorkView? _work;
+
+    /// <summary>Perfil dos fatos da última leitura; antes da primeira, o perfil gravado.</summary>
+    private UsageProfile ActiveProfile => _engine?.Facts.Profile ?? ProfileUi.Current;
+
+    /// <summary>Atualiza o chip do perfil ativo no cabeçalho.</summary>
+    private void UpdateProfileChip()
+    {
+        var p = ProfileUi.Current;
+        ProfileGlyph.Text = ProfileUi.Glyph(p);
+        ProfileText.Text = ProfileUi.Label(p);
+        string tip = Loc.T("Perfil de uso: ", "Usage profile: ") + ProfileUi.Label(p) + Loc.T(". Clique para trocar em Configurações.", ". Click to change it in Settings.");
+        ProfileChip.ToolTip = tip;
+        System.Windows.Automation.AutomationProperties.SetName(ProfileChip, tip);
+    }
+
+    /// <summary>Clique no chip do perfil no cabeçalho: abre as Configurações.</summary>
+    private void ProfileChip_Click(object sender, MouseButtonEventArgs e) => GoToTab("settings");
+
+    /// <summary>Enter/Espaço no chip do perfil (acessibilidade por teclado).</summary>
+    private void ProfileChip_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Space)
+        {
+            e.Handled = true;
+            GoToTab("settings");
+        }
+    }
+
+    /// <summary>O perfil foi gravado: ajusta abas e chip e refaz a leitura com o novo perfil.</summary>
+    private void OnProfileChanged()
+    {
+        if (_closed) return;
+        UpdateProfileChip();
+        ApplyModeToTabs();
+        _ = RescanAsync();
+    }
+
+    /// <summary>Primeira abertura: pergunta para que o PC é usado; fechar sem escolher mantém o padrão e pergunta de novo na próxima vez.</summary>
+    private void AskProfile()
+    {
+        if (_closed) return;
+        var chosen = ProfileChooserWindow.Ask(this);
+        if (chosen.HasValue) ProfileUi.Set(chosen.Value);
+    }
 
     /// <summary>Abre a aba da chave interna informada (ex.: "plan", "optimizations").</summary>
     private void GoToTab(string key)
@@ -192,11 +284,14 @@ public partial class MainWindow : Window, IDisposable
     {
         try
         {
+            // Em thread de fundo (Task.Run): GameScore, ActionPlan e o histórico fazem cálculo e E/S; a UI só recebe o resultado pronto.
             var r = await Task.Run(() =>
             {
+                // Descarta o resultado se uma varredura mais nova já substituiu esta.
                 var findings = engine.AllFindings().ToList();
-                var score = GameScore.Compute(findings);
-                var steps = ActionPlan.Build(findings);
+                var profile = engine.Facts.Profile;
+                var score = GameScore.Compute(findings, profile, engine.WorkReadingsPartial);
+                var steps = ActionPlan.Build(findings, profile);
                 var avail = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 try
                 {
@@ -229,8 +324,10 @@ public partial class MainWindow : Window, IDisposable
         AddSettingsPage();
         _modeSeg = new Segmented(ModeLabels, Ui.Simple ? 0 : 1, i => Ui.SetSimple(i == 0));
         ModeHost.Content = _modeSeg;
+        UpdateProfileChip();
         ApplyModeToTabs();
         Ui.ModeChanged += OnModeChanged;
+        ProfileUi.Changed += OnProfileChanged;
         Action<ScanEngine> insights = e => _ = UpdateInsightsAsync(e);
         ScanCompleted += insights;
         _scanHandlers.Add(insights);
@@ -248,8 +345,8 @@ public partial class MainWindow : Window, IDisposable
     /// <summary>Aviso discreto quando as preferências não puderam ser lidas e, por isso, não foram gravadas.</summary>
     private void OnPrefsSaveBlocked()
     {
-        void Show() => StatusText.Text = Loc.T("Não foi possível ler as preferências; alterações não foram salvas.",
-                                               "Could not read preferences; changes were not saved.");
+        void Show() => StatusText.Text = Loc.T("Não foi possível gravar as preferências; o perfil escolhido vale só nesta sessão.",
+                                               "Could not save preferences; the chosen profile applies to this session only.");
         if (Dispatcher.CheckAccess()) Show();
         else Dispatcher.BeginInvoke((Action)Show);
     }
@@ -273,6 +370,7 @@ public partial class MainWindow : Window, IDisposable
         System.Windows.Automation.AutomationProperties.SetName(Tabs, Loc.T("Seções", "Sections"));
     }
 
+    /// <summary>Monta a lista de abas. Cada aba com "view" é criada sob demanda pela fábrica; as demais recebem as seções de dados da varredura.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1861", Justification = "Executado uma única vez na criação da janela.")]
     private void BuildPages()
     {
@@ -292,6 +390,16 @@ public partial class MainWindow : Window, IDisposable
             _plan = new PlanView(GoToTab);
             _plan.ProgressChanged += () => _dashboard?.RefreshNext();
             return _plan;
+        });
+        Add("", "work", "Trabalho", "Work", new[] { "trabalho" }, view: () =>
+        {
+            var v = new WorkView(() => CompletedFacts, () => _engine == null ? null : Snapshot(_engine).FirstOrDefault(x => x.Key == "trabalho"),
+                RescanAsync, BeginBusy, EndBusy);
+            _work = v;
+            Action<ScanEngine> h = _ => v.Refresh();
+            ScanCompleted += h;
+            _scanHandlers.Add(h);
+            return v;
         });
         Add("", "cpu", "CPU", "CPU", new[] { "cpu" }, live: new LiveCard(
             (Loc.T("Carga", "Load"), s => LiveCard.N(s.CpuLoadPct, " %", "0.0")),
@@ -346,6 +454,7 @@ public partial class MainWindow : Window, IDisposable
         return v;
     };
 
+    /// <summary>Cria a aba: cabeçalho com ícone e rótulo (a cor acompanha a aba selecionada) e conteúdo rolável com rolagem suave.</summary>
     private TabItem CreateTab(Page p)
     {
         var header = new StackPanel { Orientation = Orientation.Horizontal };
@@ -395,12 +504,15 @@ public partial class MainWindow : Window, IDisposable
 
     // ---------- Varredura ----------
 
+    /// <summary>Ao carregar a janela: liga o timer ao vivo, inicia a primeira varredura e, na primeira abertura, pergunta o perfil depois que a janela terminou de aparecer.</summary>
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _timer.Start();
         _ = BeginScan();
+        if (ProfileUi.NeedsChoice) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(AskProfile));
     }
 
+    /// <summary>Fechar a janela dispara o mesmo descarte de <see cref="Dispose"/>.</summary>
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e) => Dispose();
 
     /// <summary>Para o timer e a varredura, descarta as abas descartáveis (ex.: captura) e o amostrador ao vivo.</summary>
@@ -409,6 +521,7 @@ public partial class MainWindow : Window, IDisposable
         if (_closed) return;
         _closed = true;
         Ui.ModeChanged -= OnModeChanged;
+        ProfileUi.Changed -= OnProfileChanged;
         Prefs.SaveBlocked -= OnPrefsSaveBlocked;
         _timer.Stop();
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
@@ -424,12 +537,18 @@ public partial class MainWindow : Window, IDisposable
 
     // ---------- Sensores (um único SensorHub compartilhado) ----------
 
+    /// <summary>Trava que garante que ninguém descarte o hub enquanto uma leitura de sensores o usa (a varredura compartilha esta trava).</summary>
     private readonly object _hubLock = new();
+    /// <summary>Criação assíncrona do hub; o LibreHardwareMonitor demora a abrir e não pode travar a UI.</summary>
     private Task<SensorHub?>? _hubTask;
+    /// <summary>1 enquanto há leitura de sensores em curso (Interlocked); as demais chamadas devolvem null.</summary>
     private int _sensorBusy;
+    /// <summary>Instante UTC da última leitura de sensores, para não repetir a leitura pós-varredura logo após uma da aba.</summary>
     private DateTime _lastSensorsAt = DateTime.MinValue;
 
+    /// <summary>Hub vivo e utilizável (volatile: lido também pela thread da varredura via SharedHub).</summary>
     private volatile SensorHub? _hubCurrent;   // hub vivo e utilizável (também lido pela varredura via SharedHub)
+    /// <summary>true após o fechamento: nenhum hub novo é criado.</summary>
     private volatile bool _hubDisposed;        // true após o fechamento: nenhum hub novo é criado
 
     /// <summary>Publica o hub compartilhado para o coletor de sensores da varredura (antes da primeira varredura).</summary>
@@ -565,11 +684,13 @@ public partial class MainWindow : Window, IDisposable
         ExportButton.IsEnabled = !_scanning && !_exporting && _engine != null;
     }
 
+    /// <summary>Botão Reler: só vale fora de varredura e sem operações em curso.</summary>
     private void Reload_Click(object sender, RoutedEventArgs e)
     {
         if (!_scanning && _busyCount == 0) _ = BeginScan();
     }
 
+    /// <summary>Abre a janela "Sobre" (modal).</summary>
     private void About_Click(object sender, RoutedEventArgs e)
     {
         var w = new AboutWindow { Owner = this };
@@ -590,6 +711,7 @@ public partial class MainWindow : Window, IDisposable
         menu.IsOpen = true;
     }
 
+    /// <summary>Exporta o relatório (HTML/texto) em thread de fundo; usuário e números de série são mascarados só no arquivo exportado, nunca na tela.</summary>
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
         var engine = _engine;
@@ -637,16 +759,18 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
+    /// <summary>Varredura completa: as seções chegam em outras threads e são levadas à UI thread por Dispatcher.BeginInvoke; seções atrasadas de varreduras antigas são ignoradas.</summary>
     private async Task StartScanAsync()
     {
         // Não há sobreposição: RescanAsync espera a varredura vigente. O cancelamento só ocorre no fechamento da janela.
         var cts = new CancellationTokenSource();
         _cts = cts;
-        var engine = new ScanEngine();
+        var engine = new ScanEngine { ProfileOverride = ProfileUi.OverrideForScan() };
         _engine = engine;
         _sw = Stopwatch.StartNew();
         _scanning = true;
         UpdateButtons();
+        _work?.Refresh();
 
         foreach (var p in _pages.Where(x => !x.IsPlaceholder))
         {
@@ -680,18 +804,22 @@ public partial class MainWindow : Window, IDisposable
         ScanCompleted?.Invoke(engine);
     }
 
+    /// <summary>Atualiza as abas que mostram a seção recém-chegada, o Resumo e a barra de status.</summary>
     private void OnSection(ScanEngine engine, SectionResult r)
     {
-        foreach (var p in _pages.Where(x => x.Keys.Contains(r.Key))) RefreshPage(engine, p);
+        foreach (var p in _pages.Where(x => !x.IsPlaceholder && x.Keys.Contains(r.Key))) RefreshPage(engine, p);
+        if (r.Key == "trabalho") _work?.Refresh();
         RefreshSummary();
         UpdateStatus(engine);
     }
 
+    /// <summary>Cópia da lista de resultados sob trava (a varredura ainda escreve nela em outra thread).</summary>
     private static List<SectionResult> Snapshot(ScanEngine engine)
     {
         lock (engine.Results) return engine.Results.ToList();
     }
 
+    /// <summary>Reconstrói o corpo de uma aba a partir das seções disponíveis; o indicador de carregamento some quando todas chegaram.</summary>
     private static void RefreshPage(ScanEngine engine, Page p)
     {
         var results = Snapshot(engine);
@@ -708,6 +836,7 @@ public partial class MainWindow : Window, IDisposable
         p.Loading.Visibility = have >= p.Keys.Length ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    /// <summary>Atualiza "Lendo N de M"/"concluída" e o selo de administrador (sem administrador a leitura é parcial).</summary>
     private void UpdateStatus(ScanEngine engine, bool finished = false)
     {
         int done = Snapshot(engine).Count;
@@ -730,6 +859,7 @@ public partial class MainWindow : Window, IDisposable
 
     // ---------- Resumo ----------
 
+    /// <summary>Reconstrói o Resumo: análise, contadores por severidade, principais gargalos e todas as verificações.</summary>
     private void RefreshSummary()
     {
         var p = _pages.First(x => x.IsSummary);
@@ -748,9 +878,10 @@ public partial class MainWindow : Window, IDisposable
         counters.Children.Add(Counter(Loc.T("ATENÇÃO", "ATTENTION"), atencao, "BadBrush"));
         p.Body.Children.Add(counters);
 
-        var top = Bottlenecks.Top(all);
+        var profile = ActiveProfile;
+        var top = Bottlenecks.Top(all, profile, 5);
         var topBody = new StackPanel();
-        topBody.Children.Add(Ui.CardTitle(Loc.T("Gargalos prováveis para jogos", "Likely bottlenecks for games")));
+        topBody.Children.Add(Ui.CardTitle(profile == UsageProfile.Work ? Loc.T("Pontos de atenção prováveis para trabalho", "Likely points of attention for work") : Loc.T("Gargalos prováveis para jogos", "Likely bottlenecks for games")));
         if (top.Count == 0)
             topBody.Children.Add(Ui.Muted(done >= _total ? Loc.T("Nenhum gargalo com impacto medido foi encontrado.", "No bottleneck with measured impact was found.") : Loc.T("Aguardando leitura...", "Waiting for the scan...")));
         for (int i = 0; i < top.Count; i++)
@@ -792,6 +923,7 @@ public partial class MainWindow : Window, IDisposable
         return card;
     }
 
+    /// <summary>Cartão de contagem de uma severidade.</summary>
     private static Border Counter(string label, int n, string brushKey)
     {
         var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
@@ -804,6 +936,7 @@ public partial class MainWindow : Window, IDisposable
 
     // ---------- Ao vivo ----------
 
+    /// <summary>Amostra ao vivo a cada segundo: lê fora da UI (Task.Run) e atualiza só os cartões "Ao vivo"; sem sobreposição.</summary>
     private async Task TickAsync()
     {
         if (_sampling || _closed) return; // amostra anterior ainda em andamento: pula o tick

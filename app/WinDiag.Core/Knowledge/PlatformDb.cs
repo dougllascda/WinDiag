@@ -12,6 +12,7 @@ namespace WinDiag.Core.Knowledge;
 /// </summary>
 public static class PlatformDb
 {
+    /// <summary>Opções padrão das expressões regulares da base: sem diferenciar maiúsculas e independentes da cultura.</summary>
     private const RegexOptions Rx = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
     // ------------------------------------------------------------------ CPU
@@ -46,9 +47,13 @@ public static class PlatformDb
         }
     }
 
+    /// <summary>Intel Core desktop: grupo 1 = linha (3/5/7/9), grupo 2 = dígitos (4 ou 5; os dois primeiros são a geração quando há 5), grupo 3 = sufixo.</summary>
     private static readonly Regex IntelRx = new(@"\bi([3579])-(\d{4,5})([A-Z]{0,3}\d?)\b", Rx);
+    /// <summary>Sufixos de notebook Intel (H, U, P, Y, G#). Esses modelos não são resolvidos porque os limites dependem do projeto do fabricante.</summary>
     private static readonly Regex IntelMobileSuffix = new(@"^(H|U|P|Y|G\d)", Rx);
+    /// <summary>Ryzen desktop: grupo 1 = número de 4 dígitos (o primeiro é a série), grupo 2 = sufixo.</summary>
     private static readonly Regex AmdRx = new(@"Ryzen\s+[3579]\s+(?:PRO\s+)?(\d{4})([A-Z0-9]*)", Rx);
+    /// <summary>Sufixos de notebook AMD (U, H, C), não resolvidos pelo mesmo motivo dos Intel móveis.</summary>
     private static readonly Regex AmdMobileSuffix = new(@"^(U|H|C)", Rx);
 
     /// <summary>Resolve o nome do processador (ex.: "Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz"). Null se não reconhecido.</summary>
@@ -76,6 +81,7 @@ public static class PlatformDb
         return null;
     }
 
+    /// <summary>TDP em watts por modelo Ryzen (valores publicados pela AMD para os modelos de desktop mais comuns). Modelo fora da tabela fica sem TDP, e a estimativa de fonte usa um valor padrão.</summary>
     private static readonly Dictionary<string, int> AmdTdpTable = new(StringComparer.OrdinalIgnoreCase)
     {
         ["1600"] = 65, ["1600X"] = 95, ["2600"] = 65, ["2600X"] = 95, ["3600"] = 65, ["3600X"] = 95, ["3700X"] = 65, ["3800X"] = 105,
@@ -85,8 +91,12 @@ public static class PlatformDb
         ["9700X"] = 65, ["9800X3D"] = 120, ["9900X"] = 120, ["9950X"] = 170,
     };
 
+    /// <summary>TDP do Ryzen reconhecido, pelo número mais o sufixo; null se o modelo não consta da tabela.</summary>
+    /// <param name="m">Resultado de <see cref="AmdRx"/>.</param>
     private static int? AmdTdp(Match m) => AmdTdpTable.TryGetValue(m.Groups[1].Value + m.Groups[2].Value, out var w) ? w : null;
 
+    /// <summary>Resolve uma CPU Intel pelo texto casado: geração, soquete, geração PCIe e memória oficial. Null para notebook ou geração fora de 6 a 14.</summary>
+    /// <param name="m">Resultado de <see cref="IntelRx"/>.</param>
     private static CpuSpec? ResolveIntel(Match m)
     {
         string tier = m.Groups[1].Value;                 // 3, 5, 7, 9
@@ -116,6 +126,8 @@ public static class PlatformDb
         };
     }
 
+    /// <summary>Resolve um Ryzen de desktop pela série. Null para notebook ou série desconhecida. O 5500, o 5700 sem X e as versões G são Cezanne, limitados a PCIe 3.0.</summary>
+    /// <param name="m">Resultado de <see cref="AmdRx"/>.</param>
     private static CpuSpec? ResolveAmd(Match m)
     {
         int n = int.Parse(m.Groups[1].Value);
@@ -166,8 +178,10 @@ public static class PlatformDb
         public bool SupportsIntelGen(int gen) => X16GenByCpuGen.ContainsKey(gen);
     }
 
+    /// <summary>Chipsets conhecidos por nome (LGA1151, LGA1200, LGA1700, AM4 e AM5).</summary>
     private static readonly Dictionary<string, ChipsetSpec> Chipsets = BuildChipsets();
 
+    /// <summary>Preenche a tabela de chipsets: para Intel, a geração PCIe do slot x16 por geração de CPU aceita; para AMD, a geração máxima do slot. Chipsets cuja geração depende da placa são marcados como tal e só entram com o mínimo garantido.</summary>
     private static Dictionary<string, ChipsetSpec> BuildChipsets()
     {
         var d = new Dictionary<string, ChipsetSpec>(StringComparer.OrdinalIgnoreCase);
@@ -208,9 +222,11 @@ public static class PlatformDb
         return d;
     }
 
+    /// <summary>Expressão que acha um nome de chipset como palavra isolada (sem letra ou dígito colado antes e sem dígito depois). Os nomes mais longos vêm primeiro, para "B650E" não casar como "B650".</summary>
     private static readonly Regex ChipsetRx = new(
         @"(?<![A-Za-z0-9])(" + string.Join("|", BuildChipsetNames()) + @")(?![0-9])", Rx);
 
+    /// <summary>Nomes de chipset em ordem decrescente de tamanho, usados para montar <see cref="ChipsetRx"/>.</summary>
     private static IEnumerable<string> BuildChipsetNames() =>
         Chipsets.Keys.OrderByDescending(k => k.Length).ThenBy(k => k);
 
@@ -234,6 +250,7 @@ public static class PlatformDb
     /// </summary>
     public sealed record GpuSpec(string Family, int Gen, int Lanes, int Tier, bool ReBar, bool LanesVary = false);
 
+    /// <summary>Padrões de nome de GPU e a especificação da família. O primeiro padrão que casar vale, então os mais específicos (ex.: GTX 1030, RTX 3050) vêm antes dos genéricos da mesma linha.</summary>
     private static readonly (Regex Pattern, GpuSpec Spec)[] Gpus =
     {
         // NVIDIA RTX 50
@@ -262,6 +279,7 @@ public static class PlatformDb
         (new(@"Arc.*\bB(570|580)\b", Rx), new("Intel Arc B-series", 4, 8, 2, true)),
     };
 
+    /// <summary>Marcas de GPU de notebook (Laptop, Mobile, Max-Q), que não são resolvidas porque a largura do link varia por projeto.</summary>
     private static readonly Regex LaptopGpuRx = new(@"Laptop|Mobile|Max-?Q|Notebook", Rx);
 
     /// <summary>Resolve o nome da GPU (ex.: "NVIDIA GeForce RTX 5060"). Null se não reconhecida ou se for GPU de notebook (a largura do link varia por projeto).</summary>
@@ -307,6 +325,12 @@ public static class PlatformDb
         return s is not null && cpu is not null && IsRealImprovement(s, cpu, cpuCores, cpuThreads, gpuPcieGen) ? s : null;
     }
 
+    /// <summary>Confirma que a CPU sugerida é melhoria real: não pode ter menos núcleos ou threads que a atual e precisa ganhar em núcleos/threads, em PCIe efetivo (limitado pela GPU) ou em RAM oficial.</summary>
+    /// <param name="s">Sugestão.</param>
+    /// <param name="cpu">CPU atual.</param>
+    /// <param name="cores">Núcleos físicos atuais.</param>
+    /// <param name="threads">Threads atuais (0 = não lido).</param>
+    /// <param name="gpuPcieGen">Geração PCIe máxima da GPU, se conhecida.</param>
     private static bool IsRealImprovement(UpgradeSuggestion s, CpuSpec cpu, int cores, int threads, int? gpuPcieGen)
     {
         if (cores <= 0) return false;
@@ -318,6 +342,11 @@ public static class PlatformDb
         return pcie || ram;
     }
 
+    /// <summary>Escolhe a sugestão de troca de CPU para combinações conhecidas (10ª geração Intel em placa que aceita a 11ª, Ryzen 1000 a 4000 em AM4, i3 de 12ª/13ª geração). Não decide se vale a pena: isso fica com <see cref="IsRealImprovement"/>.</summary>
+    /// <param name="cpu">CPU atual.</param>
+    /// <param name="chipset">Chipset da placa.</param>
+    /// <param name="cpuCores">Núcleos físicos atuais.</param>
+    /// <param name="gpuPcieGen">Geração PCIe máxima da GPU, se conhecida.</param>
     private static UpgradeSuggestion? UpgradeCandidate(CpuSpec? cpu, ChipsetSpec? chipset, int cpuCores, int? gpuPcieGen)
     {
         if (cpu is null || chipset is null) return null;
@@ -350,5 +379,6 @@ public static class PlatformDb
         return null;
     }
 
+    /// <summary>Especificação da 11ª geração Intel, usada para consultar o que um chipset entrega a uma CPU dessa geração no caminho de upgrade.</summary>
     private static readonly CpuSpec Spec11 = new("Intel", "Rocket Lake (11ª geração)", 11, "LGA1200", 4, false, 3200, null);
 }

@@ -8,8 +8,10 @@ namespace WinDiag.App.Views;
 /// <summary>Janela modal de confirmação (Sim/Não). Com requiredText, o botão só habilita com o texto exato.</summary>
 public sealed class ConfirmDialog : Window
 {
+    /// <summary>Botão de confirmação; fica desabilitado até o texto exigido ser digitado (ações de risco alto).</summary>
     private readonly Button _ok;
 
+    /// <summary>Construtor privado: use <see cref="Ask"/>, que decide dono, posição e resultado.</summary>
     private ConfirmDialog(string title, string headline, string? body, Brush? headlineBrush, string? requiredText, string okText, string cancelText)
     {
         Title = title;

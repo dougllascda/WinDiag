@@ -15,50 +15,80 @@ namespace WinDiag.App.Views;
 /// </summary>
 public sealed class SensorsView : UserControl, IDisposable
 {
+    /// <summary>Cultura do idioma atual para formatar números e horas.</summary>
     private static CultureInfo Pt => WinDiag.Core.Loc.Culture;
 
+    /// <summary>Limites de referência de temperatura (°C): a partir de 75 vira "morno" (aviso) e de 85 "quente"; o limite real depende do modelo.</summary>
     private const double WarnTemp = 75, BadTemp = 85;
+    /// <summary>Larguras (px) das colunas numéricas e da coluna de origem; as colunas Média/Origem recolhem a 0 no modo Simples.</summary>
     private const double WideCol = 80, SrcCol = 150;
 
     /// <summary>Ordem e título dos grupos de sensores dentro de cada cartão.</summary>
     private static readonly string[] GroupTitles = { Loc.T("Temperaturas", "Temperatures"), Loc.T("Ventoinhas", "Fans"), Loc.T("Voltagens", "Voltages"), Loc.T("Potência", "Power"), "Clocks", Loc.T("Uso", "Usage"), Loc.T("Outros", "Other") };
+    /// <summary>Títulos das colunas, na ordem da grade de cada grupo.</summary>
     private static readonly string[] ColTitles = { "Sensor", Loc.T("Atual", "Current"), Loc.T("Mín", "Min"), Loc.T("Máx", "Max"), Loc.T("Média", "Avg"), Loc.T("Origem", "Source") };
 
+    /// <summary>Leitura dos sensores; roda fora da UI thread (quem chama decide o mecanismo) e devolve null sem dados.</summary>
     private readonly Func<Task<SensorSnapshot?>> _read;
+    /// <summary>Timer de 1 s na UI thread; só roda com a aba visível e a janela não minimizada, para não gastar CPU à toa.</summary>
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    /// <summary>Visão detalhada (cartões por peça).</summary>
     private readonly StackPanel _detailed = new();
+    /// <summary>Contêiner dos cartões por peça, ordenados por <see cref="HwCardUi.Rank"/>.</summary>
     private readonly StackPanel _hwHost = new();
+    /// <summary>Cartão do modo Simples (resumo de temperaturas e ventoinhas).</summary>
     private readonly Border _simpleCard;
+    /// <summary>Linhas de resumo do modo Simples: CPU, GPU e ventoinhas.</summary>
     private readonly TextBlock _simpleCpu = new(), _simpleGpu = new(), _simpleFan = new();
+    /// <summary>Cartão de orientação exibido quando não há temperatura de CPU legível.</summary>
     private readonly Border _emptyCard;
+    /// <summary>Texto "Aguardando a primeira leitura" até chegar o primeiro snapshot.</summary>
     private readonly TextBlock _waiting;
+    /// <summary>Hora da última atualização.</summary>
     private readonly TextBlock _updated;
+    /// <summary>Botão que zera mín/máx/média acumulados.</summary>
     private readonly Button _reset;
+    /// <summary>Selos das fontes (HWiNFO, LibreHardwareMonitor, nvidia-smi) com destaque quando ativas.</summary>
     private readonly Border _pillHw, _pillLhm, _pillNv;
+    /// <summary>Estatística de cada sensor pela chave hardware|nome|tipo; as linhas são criadas uma vez e só têm o texto atualizado (evita reconstruir a grade a cada segundo).</summary>
     private readonly Dictionary<string, SensorRow> _rows = new();
+    /// <summary>Cartões por peça, pela chave tipo|nome.</summary>
     private readonly Dictionary<string, HwCardUi> _cards = new();
+    /// <summary>Todos os grupos criados, para aplicar o modo Simples/Detalhado a todos.</summary>
     private readonly List<GroupUi> _groups = new();
+    /// <summary>Último estado de cada selo, para só mexer no recurso quando muda.</summary>
     private readonly Dictionary<Border, bool> _pillState = new();
+    /// <summary>Chave do pincel atual de cada texto, para não reatribuir o recurso sem necessidade.</summary>
     private readonly Dictionary<TextBlock, string> _brushOf = new();
+    /// <summary>Janela dona da aba, para observar minimizar/restaurar.</summary>
     private Window? _win;
+    /// <summary>_busy evita leituras sobrepostas; _disposed impede trabalho após o descarte; _hasSnapshot indica que já chegou a primeira leitura.</summary>
     private bool _busy, _disposed, _hasSnapshot;
 
     /// <summary>Estatística acumulada de um sensor e os TextBlocks reaproveitados da sua linha.</summary>
     private sealed class SensorRow
     {
+        /// <summary>Tipo do sensor, que define a formatação e o grupo.</summary>
         public SensorKind Kind;
+        /// <summary>Unidade informada pela fonte.</summary>
         public string Unit = "";
+        /// <summary>Último valor, mínimo, máximo e soma (para a média).</summary>
         public double Last, Min, Max, Sum;
+        /// <summary>Quantidade de amostras acumuladas (divisor da média).</summary>
         public long Count;
+        /// <summary>Células reaproveitadas da linha: nome, atual, mín, máx, média e origem.</summary>
         public TextBlock Name = null!, Cur = null!, MinT = null!, MaxT = null!, Avg = null!, Src = null!;
+        /// <summary>Chave do pincel do valor atual (cor por faixa de temperatura).</summary>
         public string CurBrush = "";
 
+        /// <summary>Reinicia a estatística com o último valor como base.</summary>
         public void Reset()
         {
             Min = Max = Sum = Last;
             Count = 1;
         }
 
+        /// <summary>Acrescenta uma amostra e atualiza mín, máx e soma.</summary>
         public void Add(double v)
         {
             Last = v;
@@ -76,18 +106,26 @@ public sealed class SensorsView : UserControl, IDisposable
     /// <summary>Um grupo (ex.: Temperaturas) dentro de um cartão: grade de colunas e próxima linha livre.</summary>
     private sealed class GroupUi
     {
+        /// <summary>Posição do grupo no cartão (índice em <see cref="GroupTitles"/>).</summary>
         public int Order;
+        /// <summary>Grade com cabeçalho e uma linha por sensor.</summary>
         public Grid Grid = null!;
+        /// <summary>Próxima linha livre da grade (a 0 é o cabeçalho).</summary>
         public int NextRow = 1;
+        /// <summary>Cabeçalhos das colunas Média e Origem, ocultos no modo Simples.</summary>
         public TextBlock HeadAvg = null!, HeadSrc = null!;
     }
 
     /// <summary>Um cartão por peça (HardwareKind + Hardware).</summary>
     private sealed class HwCardUi
     {
+        /// <summary>Ordem do cartão (processador, vídeo, placa-mãe...).</summary>
         public int Rank;
+        /// <summary>Cartão visual da peça.</summary>
         public Border Card = null!;
+        /// <summary>Corpo do cartão, onde os grupos são inseridos.</summary>
         public StackPanel Body = null!;
+        /// <summary>Grupos do cartão, em ordem de tipo.</summary>
         public readonly List<GroupUi> Groups = new();
     }
 
@@ -146,6 +184,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Ciclo de vida e agendamento ----------
 
+    /// <summary>Ao carregar, passa a observar o estado da janela (minimizada) e reavalia o timer.</summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_disposed) return;
@@ -159,6 +198,7 @@ public sealed class SensorsView : UserControl, IDisposable
         UpdateRunning();
     }
 
+    /// <summary>Ao descarregar, solta o evento da janela para não vazar a aba.</summary>
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (_win != null) _win.StateChanged -= OnWindowState;
@@ -166,6 +206,7 @@ public sealed class SensorsView : UserControl, IDisposable
         UpdateRunning();
     }
 
+    /// <summary>Minimizar/restaurar a janela liga ou desliga o timer.</summary>
     private void OnWindowState(object? sender, EventArgs e) => UpdateRunning();
 
     /// <summary>Liga o timer só com a aba visível e a janela fora do estado minimizado.</summary>
@@ -181,6 +222,7 @@ public sealed class SensorsView : UserControl, IDisposable
         else _timer.Stop();
     }
 
+    /// <summary>Um ciclo de leitura. Não sobrepõe leituras lentas: se a anterior não terminou, pula o tick. Qualquer falha é engolida porque sensor nunca pode derrubar o app.</summary>
     private async Task TickAsync()
     {
         if (_busy || _disposed) return; // leitura anterior ainda em andamento: pula o tick
@@ -205,6 +247,7 @@ public sealed class SensorsView : UserControl, IDisposable
         _win = null;
     }
 
+    /// <summary>Reação ao botão Simples/Detalhado.</summary>
     private void OnModeChanged()
     {
         if (_disposed) return;
@@ -213,6 +256,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Construção fixa ----------
 
+    /// <summary>Cria um selo de fonte, inicialmente apagado.</summary>
     private static Border MakePill(string text)
     {
         var b = new Border { CornerRadius = new CornerRadius(4), Padding = new Thickness(7, 1, 7, 1), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -222,6 +266,7 @@ public sealed class SensorsView : UserControl, IDisposable
         return b;
     }
 
+    /// <summary>Acende/apaga um selo (só toca no recurso quando o estado muda).</summary>
     private void SetPill(Border b, bool active)
     {
         if (_pillState.TryGetValue(b, out var cur) && cur == active) return;
@@ -231,12 +276,14 @@ public sealed class SensorsView : UserControl, IDisposable
         ((TextBlock)b.Child).ToolTip = active ? Loc.T("Fonte em uso nesta leitura", "Source in use in this reading") : Loc.T("Fonte sem leituras nesta leitura", "Source with no readings in this reading");
     }
 
+    /// <summary>Abre um endereço no navegador padrão; ignora falha.</summary>
     private static void OpenUrl(string url)
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch { /* sem navegador padrão */ }
     }
 
+    /// <summary>Cartão com orientação para quando a temperatura do processador não pode ser lida (HWiNFO ou PawnIO; o WinDiag não baixa nem instala drivers).</summary>
     private static Border BuildEmptyCard()
     {
         var sp = new StackPanel();
@@ -261,6 +308,7 @@ public sealed class SensorsView : UserControl, IDisposable
         return card;
     }
 
+    /// <summary>Cartão do modo Simples: temperatura de CPU/GPU com faixa em palavras e estado das ventoinhas.</summary>
     private Border BuildSimpleCard()
     {
         var sp = new StackPanel();
@@ -306,6 +354,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Modo Simples/Detalhado ----------
 
+    /// <summary>Alterna entre Simples (resumo, sem Média/Origem) e Detalhado (todas as colunas e o botão de zerar).</summary>
     private void ApplyMode()
     {
         bool simple = Ui.Simple;
@@ -319,6 +368,7 @@ public sealed class SensorsView : UserControl, IDisposable
         }
     }
 
+    /// <summary>Mostra ou oculta as colunas Média/Origem de um grupo (colunas de largura 0 no Simples).</summary>
     private static void ApplyGroupMode(GroupUi g, bool detailed)
     {
         g.Grid.ColumnDefinitions[4].Width = new GridLength(detailed ? WideCol : 0);
@@ -329,6 +379,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Atualização ----------
 
+    /// <summary>Aplica um snapshot na UI thread: atualiza linhas existentes e cria, em lote ordenado, as novas.</summary>
     private void Apply(SensorSnapshot snap)
     {
         try
@@ -369,6 +420,7 @@ public sealed class SensorsView : UserControl, IDisposable
         catch { /* falha ao exibir uma leitura não derruba a aba */ }
     }
 
+    /// <summary>true se alguma fonte usada contém o trecho informado.</summary>
     private static bool Has(IReadOnlyList<string> list, string part)
     {
         foreach (var s in list)
@@ -376,8 +428,10 @@ public sealed class SensorsView : UserControl, IDisposable
         return false;
     }
 
+    /// <summary>Chave estável do sensor.</summary>
     private static string KeyOf(SensorReading r) => r.Hardware + "|" + r.Name + "|" + r.Kind;
 
+    /// <summary>Zera mín/máx/média tomando o valor atual como base.</summary>
     private void ResetStats()
     {
         foreach (var r in _rows.Values)
@@ -387,6 +441,7 @@ public sealed class SensorsView : UserControl, IDisposable
         }
     }
 
+    /// <summary>Atualiza estatística, textos e cor de uma linha; a cor só muda para temperaturas.</summary>
     private static void UpdateRow(SensorRow row, SensorReading r)
     {
         row.Add(r.Value);
@@ -406,6 +461,7 @@ public sealed class SensorsView : UserControl, IDisposable
         }
     }
 
+    /// <summary>Atribui texto só se mudou, evitando invalidar o layout à toa.</summary>
     private static void SetText(TextBlock t, string s)
     {
         if (!string.Equals(t.Text, s, StringComparison.Ordinal)) t.Text = s;
@@ -413,6 +469,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Linhas e cartões ----------
 
+    /// <summary>Grupo (seção) do cartão para cada tipo de sensor.</summary>
     private static int GroupOf(SensorKind k) => k switch
     {
         SensorKind.Temperature => 0,
@@ -424,6 +481,7 @@ public sealed class SensorsView : UserControl, IDisposable
         _ => 6
     };
 
+    /// <summary>Traduz o tipo de hardware das fontes em ordem e rótulo do cartão.</summary>
     private static (int Rank, string Label) HardwareLabel(string kind)
     {
         string k = kind ?? "";
@@ -436,6 +494,7 @@ public sealed class SensorsView : UserControl, IDisposable
         return (5, string.IsNullOrWhiteSpace(k) ? Loc.T("Outros", "Other") : k);
     }
 
+    /// <summary>Obtém ou cria o cartão da peça, inserindo-o na ordem de importância.</summary>
     private HwCardUi GetCard(SensorReading r)
     {
         string key = r.HardwareKind + "|" + r.Hardware;
@@ -456,6 +515,7 @@ public sealed class SensorsView : UserControl, IDisposable
         return c;
     }
 
+    /// <summary>Obtém ou cria o grupo dentro do cartão, mantendo a ordem dos tipos.</summary>
     private GroupUi GetGroup(HwCardUi card, int order)
     {
         foreach (var g in card.Groups)
@@ -493,6 +553,7 @@ public sealed class SensorsView : UserControl, IDisposable
         return g2;
     }
 
+    /// <summary>Cria a linha de um sensor novo (nome, atual, mín, máx, média, origem).</summary>
     private SensorRow CreateRow(SensorReading r)
     {
         var card = GetCard(r);
@@ -530,6 +591,7 @@ public sealed class SensorsView : UserControl, IDisposable
 
     // ---------- Formatação e resumo ----------
 
+    /// <summary>Formata o valor conforme o tipo do sensor (°C, RPM, V, A, W, MHz/GHz, %).</summary>
     private static string Fmt(SensorKind kind, double v, string unit)
     {
         string u = (unit ?? "").Trim();
@@ -548,12 +610,14 @@ public sealed class SensorsView : UserControl, IDisposable
         }
     }
 
+    /// <summary>true se o tipo de hardware indica placa de vídeo.</summary>
     private static bool IsGpuKind(string k) =>
         k.Contains("gpu", StringComparison.OrdinalIgnoreCase) || k.Contains("vídeo", StringComparison.OrdinalIgnoreCase) || k.Contains("video", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Temperatura representativa do processador e da placa de vídeo (mesma regra dos alertas; null = indisponível).</summary>
     internal static (double? Cpu, double? Gpu) PickTemps(SensorSnapshot s) => WinDiag.Core.Collectors.SensorsCollector.PickMaxTemps(s.Readings);
 
+    /// <summary>Atualiza o resumo do modo Simples (CPU, GPU e ventoinhas).</summary>
     private void UpdateSimple(SensorSnapshot snap, double? cpu, double? gpu)
     {
         SetSimple(_simpleCpu, Loc.T("Processador", "Processor"), cpu);
@@ -572,6 +636,7 @@ public sealed class SensorsView : UserControl, IDisposable
         SetStyled(_simpleFan, text, fans == 0 ? "MutedBrush" : "TextBrush");
     }
 
+    /// <summary>Mostra a temperatura com faixa em palavras (normal, morno, quente); sem leitura mostra "n/d".</summary>
     private void SetSimple(TextBlock t, string label, double? temp)
     {
         if (!temp.HasValue)
@@ -585,6 +650,7 @@ public sealed class SensorsView : UserControl, IDisposable
         SetStyled(t, $"{label}: {v.ToString("0", Pt)} °C ({band})", brush);
     }
 
+    /// <summary>Atribui texto e pincel do tema (só se mudaram).</summary>
     private void SetStyled(TextBlock t, string text, string brush)
     {
         SetText(t, text);

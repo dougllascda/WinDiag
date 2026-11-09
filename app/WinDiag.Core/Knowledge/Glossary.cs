@@ -28,8 +28,13 @@ public sealed record GlossaryEntry(string Key, string TitlePt, string TextPt, st
 /// </summary>
 public static partial class Glossary
 {
+    /// <summary>Textos em inglês por chave (de <c>Glossary.En.cs</c>), mesclados aos verbetes em português na construção de cada <see cref="GlossaryEntry"/>.</summary>
     private static readonly Dictionary<string, (string Title, string Text)> En = BuildEnglish();
 
+    /// <summary>Cria um verbete com o texto em português informado e o par em inglês correspondente à chave; sem tradução cadastrada, o inglês repete o português.</summary>
+    /// <param name="key">Chave estável.</param>
+    /// <param name="title">Título em português.</param>
+    /// <param name="text">Explicação em português.</param>
     private static GlossaryEntry E(string key, string title, string text)
     {
         var (tEn, xEn) = En.TryGetValue(key, out var v) ? v : (title, text);
@@ -105,7 +110,7 @@ public static partial class Glossary
         E("steam_hdd", "Jogos Steam em HDD", "O HDD é bem mais lento que o SSD para acessar muitos arquivos pequenos, como os de jogos. Isso causa telas de carregamento longas e engasgos. A Steam permite mover o jogo para um SSD sem reinstalar."),
         E("sysmain", "SysMain (Superfetch)", "É um serviço do Windows que pré-carrega programas usados com frequência. Em SSD o ganho é pequeno e, em alguns PCs, ele causa uso de disco. O app só informa o estado; o padrão do Windows costuma ser adequado."),
         E("hibernacao", "Hibernação e Inicialização Rápida", "A Inicialização Rápida faz o \"Desligar\" salvar parte do sistema para ligar mais rápido. Por isso o PC pode ficar dias sem reiniciar de verdade, e problemas se acumulam. \"Reiniciar\" faz um boot limpo."),
-        E("plano_energia", "Plano de energia", "É o conjunto de ajustes que diz ao Windows quanto economizar energia. Em desktop para jogos, o ideal é Alto desempenho ou Equilibrado sem limitar o processador a menos de 100%."),
+        E("plano_energia", "Plano de energia", "É o conjunto de ajustes que diz ao Windows quanto economizar energia. Em desktop para jogos, o ideal é Alto desempenho ou Equilibrado sem limitar o processador a menos de 100%. Para trabalho, Equilibrado costuma ser o melhor em notebook (economiza bateria) e Alto desempenho na tomada em desktop."),
         E("aspm", "ASPM (economia no link PCIe)", "É a função que reduz a energia da ligação PCIe quando ociosa. Ao voltar da economia, pode haver um pequeno atraso. O efeito costuma ser pequeno; desligá-la é uma opção para quem quer eliminar essa variável."),
         E("usb_suspend", "Suspensão seletiva de USB", "O Windows pode desligar portas USB paradas para economizar energia. Em alguns mouses, teclados e headsets isso causa atrasos ou desconexões. Em um desktop, pode ficar desligada sem problema."),
         E("ventoinha", "Ventoinha (fan)", "Move o ar para resfriar as peças. A velocidade sobe com a temperatura, e isso é normal. Se a ventoinha da placa de vídeo está parada em repouso, geralmente é o modo silencioso do fabricante."),
@@ -129,14 +134,28 @@ public static partial class Glossary
         E("overclock_memoria", "Overclock de memória", "É rodar a RAM mais rápido do que o padrão do processador. O XMP é o jeito mais simples e feito pelo fabricante da memória. Nem todo chipset permite."),
         E("estado_processador", "Estado do processador (mín / máx)", "É o limite que o plano de energia coloca no uso do processador. O máximo deve ser 100% para o processador usar todo o turbo. Valores menores reduzem desempenho em jogos."),
         E("game_bar", "Barra de Jogos do Xbox", "É a camada do Windows com atalhos de captura e overlays. Quando fica gravando em segundo plano, gasta recursos. Dá para desativar a captura sem perder o resto."),
+
+        // ------------------------------------------------------------ perfil Trabalho
+        E("trabalho", "Trabalho e escritório", "Reúne o que importa para o uso no dia a dia: impressoras, programas instalados de fábrica, atualizações do Windows, bateria, plano de energia e tempo de inicialização. São leituras e não alteram nada. As correções disponíveis passam por snapshot e podem ser desfeitas."),
+        E("impressoras", "Impressoras", "Lista as impressoras instaladas e o estado de cada uma: offline, com erro ou com trabalhos parados na fila. Impressora de rede aparece offline quando o PC não a alcança. O ideal é nenhuma impressora real offline e fila vazia."),
+        E("spooler", "Spooler de impressão", "É o serviço do Windows que recebe os documentos e os envia à impressora. Se ele para ou trava, nada imprime. Reiniciar o serviço costuma resolver, e não apaga documentos da fila."),
+        E("fila_impressao", "Fila de impressão", "É a lista de documentos esperando para imprimir. Um trabalho parado há muito tempo costuma bloquear os seguintes. Limpar a fila apaga os documentos pendentes, então imprima de novo depois."),
+        E("bloatware", "Programas de fábrica (bloatware)", "São programas que o fabricante do PC instala e que muita gente nunca usa, como testes de antivírus e jogos de propaganda. Ocupam espaço e podem abrir com o Windows. O WinDiag só aponta os conhecidos e abre o desinstalador oficial; drivers e ferramentas de suporte do fabricante devem ser mantidos."),
+        E("atualizacoes", "Atualizações do Windows", "Mostra quando foi a última atualização instalada e se o Windows está esperando um reinício para terminar alguma. Atualizações trazem correções de segurança. Mais de 45 dias sem nenhuma merece uma verificação em Configurações > Windows Update."),
+        E("reinicio_pendente", "Reinício pendente", "Algumas atualizações só terminam de ser instaladas depois que o PC reinicia. Enquanto isso, a correção de segurança pode não estar valendo. Reiniciar, e não só desligar, conclui o processo."),
+        E("saude_bateria", "Saúde da bateria", "Compara a carga máxima que a bateria segura hoje com a de quando era nova (capacidade de projeto). O desgaste aumenta com os ciclos de carga e com o calor. Até uns 20% é comum; acima de 40% a autonomia cai de forma perceptível e acima de 60% vale pensar em troca."),
+        E("tempo_inicializacao", "Tempo de inicialização", "É quanto o Windows levou para ficar utilizável no último boot, segundo o registro de desempenho dele. Até uns 40 segundos é bom em SSD; acima de 60 segundos costuma haver muitos programas abrindo junto ou um HDD. Desativar o que abre sozinho ajuda."),
     };
 
+    /// <summary>Índice dos verbetes por chave (sem diferenciar maiúsculas).</summary>
     private static readonly Dictionary<string, GlossaryEntry> ByKey =
         All.ToDictionary(e => e.Key, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Índice dos verbetes por título normalizado (sem acentos e pontuação), nos dois idiomas, mais os apelidos de títulos de coletores.</summary>
     private static readonly Dictionary<string, GlossaryEntry> ByNormTitle = BuildTitleIndex();
 
     // Prefixos de títulos normalizados de grupos -> chave. Ordem importa: do mais específico ao mais geral.
+    /// <summary>Prefixos de títulos normalizados de grupos (pt e en) e a chave do verbete correspondente. Serve para grupos cujo título tem parte variável (ex.: "Disco 0 ..."). A ordem importa: o primeiro prefixo que casar vale.</summary>
     private static readonly (string Prefix, string Key)[] PrefixRules =
     {
         ("disco ", "disco"),
@@ -195,10 +214,13 @@ public static partial class Glossary
         ("graphics subsystem", "subsistema_grafico"),
     };
 
+    /// <summary>Reconhece nomes de placas de vídeo (NVIDIA, AMD, Intel Arc e gráficos integrados) para ligar um título de grupo ao verbete de placa de vídeo.</summary>
     private static readonly Regex GpuNameRx = new(@"NVIDIA|GeForce|\bRTX\b|\bGTX\b|Radeon|\bArc\b|Intel\(R\)\s*(UHD|Iris|HD)\s*Graphics|\bUHD Graphics\b|Vega\s*\d*\s*Graphics|AMD\s+Graphics", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    /// <summary>Reconhece nomes de fabricantes e modelos genéricos de monitor para ligar um título de grupo ao verbete de monitores.</summary>
     private static readonly Regex MonitorNameRx = new(@"\b(AOC|LG|Samsung|Dell|BenQ|ASUS|Acer|ViewSonic|Philips|MSI|Gigabyte|HP|Lenovo|Sony|Eizo|Generic PnP|PnP Monitor|Monitor)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    /// <summary>Monta o índice por título normalizado a partir dos verbetes e dos apelidos usados como título pelos coletores. <c>TryAdd</c> mantém o primeiro, então os títulos dos próprios verbetes têm prioridade.</summary>
     private static Dictionary<string, GlossaryEntry> BuildTitleIndex()
     {
         var d = new Dictionary<string, GlossaryEntry>(StringComparer.Ordinal);
@@ -275,6 +297,13 @@ public static partial class Glossary
         Alias("Hibernation", "hibernacao");
         Alias("Services and temporary files", "servicos_temporarios");
         Alias("Active network and audio", "rede_audio");
+        // Perfil Trabalho: títulos de grupo do WorkCollector.
+        Alias("Programas de fábrica", "bloatware");
+        Alias("Factory programs", "bloatware");
+        Alias("Windows Update", "atualizacoes");
+        Alias("Bateria", "saude_bateria");
+        Alias("Battery", "saude_bateria");
+        Alias("Reinício pendente", "reinicio_pendente");
         return d;
     }
 

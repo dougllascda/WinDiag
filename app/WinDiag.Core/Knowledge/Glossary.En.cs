@@ -1,5 +1,6 @@
 namespace WinDiag.Core.Knowledge;
 
+/// <summary>Parte do glossário com as traduções em inglês (ver <c>Glossary.cs</c> para o restante).</summary>
 public static partial class Glossary
 {
     /// <summary>Versão em inglês dos verbetes (título e texto), por chave.</summary>
@@ -68,7 +69,7 @@ public static partial class Glossary
         ["steam_hdd"] = ("Steam games on HDD", "An HDD is much slower than an SSD at accessing many small files, such as game files. This causes long loading screens and stutter. Steam lets you move the game to an SSD without reinstalling."),
         ["sysmain"] = ("SysMain (Superfetch)", "A Windows service that preloads frequently used programs. On an SSD the gain is small and, on some PCs, it causes disk usage. The app only reports the state; the Windows default is usually adequate."),
         ["hibernacao"] = ("Hibernation and Fast Startup", "Fast Startup makes \"Shut down\" save part of the system so it starts faster. Because of that, the PC can go days without truly restarting, and problems accumulate. \"Restart\" does a clean boot."),
-        ["plano_energia"] = ("Power plan", "The set of settings that tells Windows how much power to save. On a gaming desktop, the ideal is High performance or Balanced without limiting the processor to less than 100%."),
+        ["plano_energia"] = ("Power plan", "The set of settings that tells Windows how much power to save. On a gaming desktop, the ideal is High performance or Balanced without limiting the processor to less than 100%. For work, Balanced is usually best on a laptop (saves battery) and High performance on a desktop that is plugged in."),
         ["aspm"] = ("ASPM (PCIe link power saving)", "The function that reduces PCIe link power when idle. When returning from power saving, there can be a small delay. The effect is usually small; turning it off is an option for those who want to eliminate that variable."),
         ["usb_suspend"] = ("USB selective suspend", "Windows can turn off idle USB ports to save power. On some mice, keyboards and headsets this causes delays or disconnections. On a desktop, it can stay off without problems."),
         ["ventoinha"] = ("Fan", "Moves air to cool the parts. The speed rises with temperature, and that is normal. If the graphics card fan is stopped at idle, it is usually the manufacturer's silent mode."),
@@ -92,5 +93,14 @@ public static partial class Glossary
         ["overclock_memoria"] = ("Memory overclocking", "Running the RAM faster than the processor's default. XMP is the simplest way and is done by the memory manufacturer. Not every chipset allows it."),
         ["estado_processador"] = ("Processor state (min / max)", "The limit the power plan places on processor usage. The maximum should be 100% so the processor can use its full turbo. Lower values reduce performance in games."),
         ["game_bar"] = ("Xbox Game Bar", "The Windows layer with capture shortcuts and overlays. When it keeps recording in the background, it uses resources. You can disable capture without losing the rest."),
+        ["trabalho"] = ("Work and office", "Gathers what matters for everyday use: printers, factory-installed programs, Windows updates, battery, power plan and startup time. These are readings and change nothing. The available fixes go through a snapshot and can be undone."),
+        ["impressoras"] = ("Printers", "Lists the installed printers and the state of each one: offline, in error or with jobs stuck in the queue. A network printer shows as offline when the PC cannot reach it. The ideal is no real printer offline and an empty queue."),
+        ["spooler"] = ("Print spooler", "The Windows service that receives documents and sends them to the printer. If it stops or hangs, nothing prints. Restarting the service usually fixes it, and it does not delete documents from the queue."),
+        ["fila_impressao"] = ("Print queue", "The list of documents waiting to print. A job stuck for a long time usually blocks the ones after it. Clearing the queue deletes the pending documents, so print them again afterwards."),
+        ["bloatware"] = ("Factory programs (bloatware)", "Programs the PC maker installs that many people never use, such as antivirus trials and promotional games. They take up space and may open with Windows. WinDiag only flags the known ones and opens the official uninstaller; manufacturer drivers and support tools should be kept."),
+        ["atualizacoes"] = ("Windows updates", "Shows when the last update was installed and whether Windows is waiting for a restart to finish one. Updates bring security fixes. More than 45 days without any deserves a check in Settings > Windows Update."),
+        ["reinicio_pendente"] = ("Pending restart", "Some updates only finish installing after the PC restarts. Until then, the security fix may not be in effect. Restarting, not just shutting down, completes the process."),
+        ["saude_bateria"] = ("Battery health", "Compares the maximum charge the battery holds today with when it was new (design capacity). Wear grows with charge cycles and heat. Up to about 20% is common; above 40% battery life drops noticeably and above 60% a replacement is worth considering."),
+        ["tempo_inicializacao"] = ("Boot time", "How long Windows took to become usable on the last boot, according to its own performance log. Up to about 40 seconds is good on an SSD; above 60 seconds there are usually many programs opening together or an HDD. Turning off what opens by itself helps."),
     };
 }

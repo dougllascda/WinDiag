@@ -63,6 +63,19 @@ public class EnglishScanTests
                 Check($"plan what {step.Key}", step.What);
             }
 
+            // Perfil Trabalho: nota, áreas, resumo, plano e motivos dos programas de fábrica também saem em inglês.
+            var work = GameScore.Compute(all, WinDiag.Core.Model.UsageProfile.Work);
+            Check("work score grade", work.Grade);
+            Check("work score summary", work.Summary);
+            foreach (var p in work.Parts) Check("work score area", p.Area);
+            foreach (var step in ActionPlan.Build(all, WinDiag.Core.Model.UsageProfile.Work))
+            {
+                Check($"work plan where {step.Key}", step.Where);
+                Check($"work plan what {step.Key}", step.What);
+            }
+            foreach (var b in engine.Facts.Bloat) Check($"bloat reason {b.Name}", b.Reason);
+            foreach (var pr in engine.Facts.Printers) Check($"printer status {pr.Name}", pr.StatusText);
+
             Assert.True(problems.Count == 0, "Textos em português no modo inglês:\n" + string.Join("\n", problems.Distinct().Take(40)));
         }
         finally

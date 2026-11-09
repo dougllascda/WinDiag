@@ -8,10 +8,15 @@ namespace WinDiag.App.Views;
 /// <summary>Histórico de snapshots com restauração do snapshot inteiro.</summary>
 public sealed class SnapshotHistoryWindow : Window
 {
+    /// <summary>Refaz a varredura da janela principal ao fechar, se algum snapshot foi restaurado.</summary>
     private readonly Func<Task> _rescan;
+    /// <summary>Lista de snapshots (um cartão cada), reconstruída por <see cref="Load"/>.</summary>
     private readonly StackPanel _list = new();
+    /// <summary>Mensagens do último resultado da restauração.</summary>
     private readonly StackPanel _log = new();
+    /// <summary>Camada translúcida "Aplicando..." exibida durante a restauração.</summary>
     private readonly Border _busy;
+    /// <summary>true se alguma restauração foi feita (dispara a nova varredura ao fechar).</summary>
     private bool _changed;
 
     /// <summary>Cria a janela; <paramref name="rescan"/> refaz a varredura ao fechar se algo foi restaurado.</summary>
@@ -58,9 +63,12 @@ public sealed class SnapshotHistoryWindow : Window
         Closed += async (_, _) => { if (_changed) { try { await _rescan(); } catch { } } };
     }
 
+    /// <summary>Restaurar grava no sistema (HKLM etc.): sem administrador o botão fica desabilitado.</summary>
     private readonly bool _isAdmin;
+    /// <summary>true durante a restauração; bloqueia reentrada e o fechamento da janela.</summary>
     private bool _working;
 
+    /// <summary>Lê os snapshots do disco (mais recentes primeiro) e reconstrói a lista; falha de leitura vira lista vazia.</summary>
     private void Load()
     {
         _list.Children.Clear();
@@ -108,6 +116,7 @@ public sealed class SnapshotHistoryWindow : Window
         }
     }
 
+    /// <summary>Confirma, restaura o snapshot em thread de fundo (o FixEngine grava um novo snapshot do estado atual antes, então dá para desfazer) e mostra o resultado.</summary>
     private async Task RestoreAsync(SnapshotFile snap)
     {
         if (_working) return;

@@ -21,7 +21,15 @@ public sealed class UserPrefs
     public string? PsuModel { get; set; }
     /// <summary>Ids dos passos do plano de ação já concluídos.</summary>
     public List<string> PlanDone { get; set; } = new();
+    /// <summary>Perfil de uso: "" = ainda não escolhido; "Gaming" ou "Work".</summary>
+    public string Profile { get; set; } = "";
 
+    /// <summary>Converte a preferência de perfil em <see cref="Model.UsageProfile"/>: "Work" (sem diferenciar maiúsculas) é Trabalho; vazio, nulo ou desconhecido é Jogos.</summary>
+    /// <param name="pref">Valor de <see cref="Profile"/>.</param>
+    public static Model.UsageProfile ProfileOf(string? pref) =>
+        string.Equals(pref?.Trim(), "Work", StringComparison.OrdinalIgnoreCase) ? Model.UsageProfile.Work : Model.UsageProfile.Gaming;
+
+    /// <summary>Opções do JSON das preferências: indentado, sem diferenciar maiúsculas nos nomes (aceita arquivos editados à mão) e sem escape de acentos.</summary>
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -44,7 +52,9 @@ public sealed class UserPrefs
     [JsonIgnore]
     public bool IsFallback { get; private set; }
 
+    /// <summary>Tentativas de leitura quando o arquivo está bloqueado (por exemplo, outra instância gravando).</summary>
     private const int ReadAttempts = 3;
+    /// <summary>Espera entre tentativas de leitura, em milissegundos.</summary>
     private const int RetryDelayMs = 50;
 
     /// <summary>Lê as preferências de um caminho específico (usado em testes).</summary>
@@ -84,6 +94,7 @@ public sealed class UserPrefs
             p.Language = string.IsNullOrWhiteSpace(p.Language) ? "Auto" : p.Language;
             p.Mode = string.IsNullOrWhiteSpace(p.Mode) ? "Simple" : p.Mode;
             p.PlanDone ??= new List<string>();
+            p.Profile ??= "";
             if (p.PsuWatts is <= 0) p.PsuWatts = null;
             return p;
         }

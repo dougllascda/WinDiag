@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 
 namespace WinDiag.Core.Util;
@@ -6,11 +6,13 @@ namespace WinDiag.Core.Util;
 /// <summary>Execução de ferramentas do Windows (nvidia-smi, powercfg, bcdedit, fltmc) sem janela e com timeout.</summary>
 public static class Proc
 {
+    /// <summary>Separadores de linha da saída de ferramentas de console.</summary>
     private static readonly string[] NewLines = { "\r\n", "\n" };
 
     /// <summary>Codificação OEM do console do sistema (CP850 em pt-BR); cai para UTF-8 se a página não estiver disponível.</summary>
     public static Encoding OemEncoding { get; } = ResolveOem();
 
+    /// <summary>Resolve a página de código OEM da cultura atual. Registra o provedor de code pages porque o .NET moderno só traz UTF-8/Unicode por padrão.</summary>
     private static Encoding ResolveOem()
     {
         try
@@ -55,10 +57,12 @@ public static class Proc
             };
             using var p = Process.Start(psi);
             if (p is null) return new Result(-1, "", Loc.T("não iniciou", "did not start"), false);
+            // Leitura assíncrona de stdout e stderr ao mesmo tempo evita deadlock quando o buffer do pipe enche antes de o processo terminar.
             var outTask = p.StandardOutput.ReadToEndAsync();
             var errTask = p.StandardError.ReadToEndAsync();
             if (!p.WaitForExit(timeoutMs))
             {
+                // Kill(true) encerra a árvore de processos, para não deixar filhos órfãos após o timeout.
                 try { p.Kill(true); } catch { }
                 return new Result(-1, "", "tempo esgotado", true);
             }

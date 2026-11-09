@@ -1,10 +1,10 @@
 ﻿; WinDiag.iss - script do instalador (Inno Setup 6.x)
 ;
-; Compilar (o publish.ps1 faz isto automaticamente):
+; Compilar (o tools\publish.ps1 faz isto automaticamente):
 ;   ISCC.exe /DMyAppVersion=1.0.0 /DSourceExe=C:\caminho\WinDiag-Portable-1.0.0.exe /O..\dist installer\WinDiag.iss
 ;
 ; Parametros:
-;   /DMyAppVersion  versao do app (lida de app\Directory.Build.props pelo publish.ps1)
+;   /DMyAppVersion  versao do app (lida de app\Directory.Build.props pelo tools\publish.ps1)
 ;   /DSourceExe     WinDiag.exe self-contained publicado (opcional; padrao: dist\WinDiag-Portable-{versao}.exe)
 ;
 ; O instalador nao registra servicos nem drivers. Copia apenas o programa e atalhos.
@@ -43,12 +43,13 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\app\WinDiag.App\Assets\WinDiag.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Licenca proprietaria "source-available" (WinDiag License); o texto e exibido no assistente.
 LicenseFile=..\LICENSE
 WizardStyle=modern
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename=WinDiag-Setup-{#MyAppVersion}
-; Saida: dist\ por padrao (o publish.ps1 tambem passa /O).
+; Saida: dist\ por padrao (o tools\publish.ps1 tambem passa /O).
 OutputDir=..\dist
 
 [Languages]

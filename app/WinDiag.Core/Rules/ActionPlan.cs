@@ -34,8 +34,11 @@ public sealed record ActionStep(string Key, int Order, string Title, string Wher
 /// <summary>Monta a lista ordenada de passos a partir dos achados.</summary>
 public static partial class ActionPlan
 {
+    /// <summary>Marcadores (pt e en) do trecho "onde está o limite" no texto explicativo do achado.</summary>
     private static readonly string[] WherePrefixes = { "Onde está o limite:", "Where the limit is:" };
+    /// <summary>Marcadores (pt e en) do trecho "o que dá para melhorar" na ação do achado.</summary>
     private static readonly string[] WhatPrefixes = { "O que dá para melhorar:", "What can be improved:" };
+    /// <summary>Marcadores (pt e en) do trecho "ganho esperado" na ação do achado.</summary>
     private static readonly string[] GainPrefixes = { "Ganho esperado:", "Expected gain:" };
 
     /// <summary>Procura o primeiro marcador (pt ou en) no texto; devolve posição e tamanho do marcador, ou -1.</summary>
@@ -50,16 +53,22 @@ public static partial class ActionPlan
         return (best, len);
     }
 
+    /// <summary>Reconhece o marcador de custo no texto da ação, como "(custo: grátis)" ou "(cost: hardware)".</summary>
     [GeneratedRegex(@"\((?:custo|cost):\s*(grátis|gratis|free|hardware)\)", RegexOptions.IgnoreCase)]
     private static partial Regex CostRx();
 
     /// <summary>Constrói o plano: grátis antes de hardware; dentro, maior gravidade e impacto primeiro.</summary>
     /// <param name="findings">Achados da varredura.</param>
-    public static List<ActionStep> Build(IEnumerable<Finding> findings)
+    public static List<ActionStep> Build(IEnumerable<Finding> findings) => Build(findings, UsageProfile.Gaming);
+
+    /// <summary>Constrói o plano do perfil: só achados de escopo Both ou do perfil; grátis antes de hardware; dentro, maior gravidade e impacto primeiro.</summary>
+    /// <param name="findings">Achados da varredura.</param>
+    /// <param name="profile">Perfil de uso.</param>
+    public static List<ActionStep> Build(IEnumerable<Finding> findings, UsageProfile profile)
     {
-        var relevant = findings.Where(f =>
+        var relevant = findings.Where(f => ScopeRules.Matches(f.Scope, profile) && (
             ((f.Sev == Severity.Aviso || f.Sev == Severity.Atencao) && !string.IsNullOrWhiteSpace(f.Action))
-            || (f.Sev == Severity.Info && (!string.IsNullOrEmpty(f.FixId) || f.Impact >= 30)))
+            || (f.Sev == Severity.Info && (!string.IsNullOrEmpty(f.FixId) || f.Impact >= 30))))
             .OrderByDescending(f => f.Sev).ThenByDescending(f => f.Impact).ToList();
 
         // Agrupa por Action idêntica (quando houver) ou por título.
@@ -110,6 +119,8 @@ public static partial class ActionPlan
             .Select((s, i) => s with { Order = i + 1 }).ToList();
     }
 
+    /// <summary>Separa o texto de um achado em onde está o limite, o que fazer, o custo e o ganho. O custo vem do marcador explícito; sem ele, verbos de troca ou compra associados a uma peça indicam hardware, e o resto é grátis.</summary>
+    /// <param name="f">Achado.</param>
     private static (string Where, string What, ActionCost Cost, string Gain) Parse(Finding f)
     {
         string where = "";
@@ -140,6 +151,8 @@ public static partial class ActionPlan
         return (where, what, cost, gain);
     }
 
+    /// <summary>Nome da seção no idioma atual, usado quando o achado não informa onde está o limite.</summary>
+    /// <param name="s">Chave da seção.</param>
     private static string SectionName(string s) => s switch
     {
         "gpu" => Loc.T("Placa de vídeo", "Graphics card"),
@@ -153,9 +166,12 @@ public static partial class ActionPlan
         "eventos" => Loc.T("Eventos", "Events"),
         "sensores" => Loc.T("Sensores", "Sensors"),
         "processos" => Loc.T("Processos e inicialização", "Processes and startup"),
+        "trabalho" => Loc.T("Trabalho e escritório", "Work and office"),
         _ => s
     };
 
+    /// <summary>Normaliza um título (sem acentos, minúsculo, sem pontuação) para servir de chave de agrupamento estável entre execuções.</summary>
+    /// <param name="title">Título original.</param>
     private static string Norm(string title)
     {
         var sb = new StringBuilder();

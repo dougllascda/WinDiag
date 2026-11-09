@@ -12,10 +12,10 @@ Even without a certificate, the repository already provides `SHA256SUMS.txt` and
 
 ## How the repository is prepared
 
-- `publish.ps1` runs the `WINDIAG_SIGN_CMD` environment variable for every `.exe` (portable, fx and installer) before computing the hashes. The `{file}` token becomes the file path. Local example:
+- `tools\publish.ps1` runs the `WINDIAG_SIGN_CMD` environment variable for every `.exe` (portable, fx and installer) before computing the hashes. The `{file}` token becomes the file path. Local example:
   ```powershell
   $env:WINDIAG_SIGN_CMD = 'signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f C:\cert\codesign.pfx /p PASSWORD "{file}"'
-  pwsh -File publish.ps1
+  pwsh -File tools\publish.ps1
   ```
 - `release.yml` has an active step for a `.pfx` certificate stored as a secret (option B below) and a commented block for SignPath (option A).
 - Always use a timestamp (`/tr` + `/td SHA256`), so the signature stays valid after the certificate expires.
@@ -23,7 +23,7 @@ Even without a certificate, the repository already provides `SHA256SUMS.txt` and
 ## Options
 
 ### A. SignPath Foundation (free for open source)
-1. Check https://signpath.org/ for the current criteria for open source projects (approved license, public repository, no prohibited components, etc.) and submit the application. There is a manual review and approval.
+1. Check https://signpath.org/ for the current criteria for open source projects (approved open source license, public repository; WinDiag is source-available under a proprietary license, so it may not qualify, no prohibited components, etc.) and submit the application. There is a manual review and approval.
 2. After approval, create the project and the signing policy in the SignPath dashboard and install/connect the GitHub app as described in their documentation.
 3. Generate an API token and store it in **Settings > Secrets > Actions** as `SIGNPATH_API_TOKEN`.
 4. In `release.yml`, uncomment the "SignPath" block: the build uploads the unsigned artifact, SignPath signs it and returns it in `dist-signed`. Adjust `organization-id`, `project-slug` and `signing-policy-slug`.
@@ -42,7 +42,7 @@ Even without a certificate, the repository already provides `SHA256SUMS.txt` and
 3. In CI, use Microsoft's official signing action with OIDC/Service Principal authentication (`AZURE_*` secrets), or call `signtool` with the Trusted Signing dlib through `WINDIAG_SIGN_CMD`. The certificates are short-lived, which is why the timestamp is essential.
 
 ### D. EV certificate
-Check the current conditions. Historically it was expensive and gave immediate SmartScreen reputation, but that special advantage was reduced starting in 2024. For a small open source project, options A to C are usually more proportionate. Reassess only if the rules change.
+Check the current conditions. Historically it was expensive and gave immediate SmartScreen reputation, but that special advantage was reduced starting in 2024. For a small independent project, options B and C are usually more proportionate. Reassess only if the rules change.
 
 ## How end users verify
 

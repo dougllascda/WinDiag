@@ -75,7 +75,9 @@ public sealed class FixEngine
     public SnapshotStore Store { get; }
     /// <summary>true = simulação: nada é gravado nem alterado.</summary>
     public bool DryRun { get; }
+    /// <summary>Versão do WinDiag gravada em cada snapshot (permite saber qual formato o gravou).</summary>
     private static string AppVersion => AppInfo.Version;
+    /// <summary>Chave do registro onde fica o valor <c>HibernateEnabled</c> (hibernação).</summary>
     private const string HibPath = @"HKLM:\SYSTEM\CurrentControlSet\Control\Power";
 
     /// <summary>Cria o motor.</summary>
@@ -100,7 +102,7 @@ public sealed class FixEngine
         foreach (var fix in FixCatalog.All)
         {
             bool applicable = Try(() => fix.Applicable(facts));
-            if (fix.Temp || fix.StartupApps)
+            if (fix.Temp || fix.StartupApps || fix.IsAction)
             {
                 list.Add(new FixStatus { Fix = fix, Kind = applicable ? FixStatusKind.Disponivel : FixStatusKind.NaoAplicavel });
                 continue;
@@ -171,9 +173,13 @@ public sealed class FixEngine
         }
         if (expected.Hib is not null && (current.Hib is null || RegDiffers(expected.Hib, current.Hib))) return true;
         if (expected.Mmc is bool em && current.Mmc is bool cm && em != cm) return true;
+        if (expected.PowerPlan is not null && !string.Equals(expected.PowerPlan, current.PowerPlan, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 
+    /// <summary>Compara dois estados de um valor de registro: existência e, se existir, o valor normalizado pelo tipo salvo (assim 1 inteiro e 1 vindo do JSON como long são iguais). Erro de conversão conta como diferente.</summary>
+    /// <param name="a">Estado esperado.</param>
+    /// <param name="b">Estado atual.</param>
     private static bool RegDiffers(RegState a, RegState b)
     {
         if (a.Exists != b.Exists) return true;
@@ -195,7 +201,7 @@ public sealed class FixEngine
             var fx = new SnapshotFix { Id = fix.Id, Name = fix.Name, Reversible = fix.Reversible, Action = SnapshotActions.Apply, State = state };
             var snap = new Snapshot { Version = AppVersion, Fixes = { fx } };
             r.SnapshotPath = SaveSnap(snap);
-            foreach (var m in Apply(fix, null)) Msg(r, fix.Id, m);
+            foreach (var m in Apply(fix, null, facts)) Msg(r, fix.Id, m);
             r.RebootNeeded = fix.Reboot;
             if (!DryRun && r.SnapshotPath is not null && fix.Reversible)
             {
@@ -241,6 +247,28 @@ public sealed class FixEngine
         {
             if (!DryRun) Store.Log("TEMP: limpeza iniciada");
             foreach (var m in Apply(fix, null)) Msg(r, fix.Id, m);
+        }
+        catch (Exception ex) { Fail(r, fix.Id, ex); }
+        return r;
+    }
+
+    /// <summary>
+    /// Executa uma ação pontual do catálogo (<see cref="FixDefinition.IsAction"/>: reiniciar o Spooler, limpar a fila de impressão). Não é reversível e não grava snapshot,
+    /// mas cada passo vai para o changes.log. Em DryRun nada é executado: só as mensagens do que seria feito. Exige administrador.
+    /// </summary>
+    /// <param name="fix">Item do catálogo com <see cref="FixDefinition.IsAction"/> = true.</param>
+    public OpResult RunAction(FixDefinition fix)
+    {
+        var r = new OpResult();
+        if (!fix.IsAction)
+        {
+            r.Ok = false; r.Error = Loc.T("Este item não é uma ação pontual.", "This item is not a one-off action.");
+            return r;
+        }
+        try
+        {
+            if (!DryRun) Store.Log($"{fix.Id}: ação iniciada");
+            foreach (var m in ActionSteps(fix)) Msg(r, fix.Id, m);
         }
         catch (Exception ex) { Fail(r, fix.Id, ex); }
         return r;
@@ -324,6 +352,7 @@ public sealed class FixEngine
         }
         foreach (var s in fix.Svc) st.Svc.Add(SvcCapture(s));
         if (fix.Mmc) st.Mmc = facts.MemCompression;
+        if (fix.PowerPlan) st.PowerPlan = PowerCfg.ActiveSchemeGuid();
         if (fix.Bcd.Count > 0)
         {
             var cur = BcdRead();
@@ -343,6 +372,7 @@ public sealed class FixEngine
         foreach (var p in saved.Power) if (!string.IsNullOrEmpty(p.Sub)) st.Power.Add(new PowerState { Sub = p.Sub, Set = p.Set, Old = PowerRead(p.Sub, p.Set, p.Scheme), Scheme = p.Scheme });
         foreach (var s in saved.Svc) if (!string.IsNullOrEmpty(s.Name)) st.Svc.Add(SvcCapture(s.Name));
         if (saved.Mmc is not null && readMmc) st.Mmc = MmcRead();
+        if (saved.PowerPlan is not null) st.PowerPlan = PowerCfg.ActiveSchemeGuid();
         if (saved.Bcd.Count > 0)
         {
             var cur = BcdRead();
@@ -354,7 +384,13 @@ public sealed class FixEngine
 
     // ------------------------------------------------------------------ aplicar / restaurar
 
-    private List<string> Apply(FixDefinition fix, IEnumerable<StartupItem>? picked)
+    /// <summary>Executa os passos de uma otimização: Temp, registro, serviços, DirectX, apps de inicialização, energia, compressão de memória, BCD e plano de energia. Em DryRun só monta as mensagens.</summary>
+    /// <remarks>Os valores anteriores já foram capturados em <see cref="Capture"/> antes desta chamada; é isso que torna cada passo reversível. Falha em qualquer passo lança exceção, tratada por quem chamou (<see cref="Fail"/>).</remarks>
+    /// <param name="fix">Otimização a aplicar.</param>
+    /// <param name="picked">Apps de inicialização escolhidos (somente para a otimização de inicialização).</param>
+    /// <param name="facts">Fatos do PC (necessários ao plano de energia de trabalho).</param>
+    /// <returns>Mensagens do que foi feito.</returns>
+    private List<string> Apply(FixDefinition fix, IEnumerable<StartupItem>? picked, SystemFacts? facts = null)
     {
         var msgs = new List<string>();
         if (fix.Temp)
@@ -409,6 +445,17 @@ public sealed class FixEngine
         {
             if (!DryRun) BcdWrite(b.Name, b.Value);
             msgs.Add(b.Value is null ? Loc.T($"BCD: {b.Name} removido", $"BCD: {b.Name} removed") : $"BCD: {b.Name} = {b.Value}");
+        }
+        if (fix.PowerPlan)
+        {
+            string target = FixCatalog.WorkPlanGuid(facts ?? new SystemFacts());
+            if (!DryRun)
+            {
+                Check(Proc.Run(Proc.Sys32("powercfg.exe"), "/setactive " + target), "powercfg /setactive");
+                if (!string.Equals(PowerCfg.ActiveSchemeGuid(), target, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(Loc.T("O Windows não ativou o plano de energia pedido (ele pode não existir neste PC).", "Windows did not activate the requested power plan (it may not exist on this PC)."));
+            }
+            msgs.Add(Loc.T($"Plano de energia ativo: {target}", $"Active power plan: {target}"));
         }
         if (fix.Hib)
         {
@@ -477,6 +524,12 @@ public sealed class FixEngine
             if (!DryRun) BcdWrite(b.Name, b.Old);
             msgs.Add(b.Old is null ? Loc.T($"BCD: {b.Name} removido (não existia antes)", $"BCD: {b.Name} removed (did not exist before)") : Loc.T($"BCD: {b.Name} restaurado para {b.Old}", $"BCD: {b.Name} restored to {b.Old}"));
         }
+        if (state.PowerPlan is { Length: > 0 } plan)
+        {
+            if (PowerCfg.ParseSchemeGuid(plan) is not { } planGuid) throw new InvalidOperationException(Loc.T("GUID do plano de energia salvo é inválido.", "The saved power plan GUID is invalid."));
+            if (!DryRun) Check(Proc.Run(Proc.Sys32("powercfg.exe"), "/setactive " + planGuid), "powercfg /setactive");
+            msgs.Add(Loc.T($"Plano de energia restaurado: {planGuid}", $"Power plan restored: {planGuid}"));
+        }
         if (state.Hib is { Exists: true } h && Convert.ToInt64(ToRegistryValue(h.Value, RegistryValueKind.DWord), System.Globalization.CultureInfo.InvariantCulture) == 1)
         {
             if (!DryRun) Check(Proc.Run(Proc.Sys32("powercfg.exe"), "/hibernate on"), "powercfg /hibernate on");
@@ -543,6 +596,8 @@ public sealed class FixEngine
         }
     }
 
+    /// <summary>Converte um valor lido do JSON do snapshot em objeto .NET: números viram long (ou double), listas viram <c>List&lt;object?&gt;</c>. Mantém compatibilidade com snapshots da versão 7.</summary>
+    /// <param name="je">Elemento JSON.</param>
     private static object? FromJson(JsonElement je) => je.ValueKind switch
     {
         JsonValueKind.Number => je.TryGetInt64(out var l) ? l : je.GetDouble(),
@@ -553,6 +608,8 @@ public sealed class FixEngine
         _ => null,
     };
 
+    /// <summary>Representação textual canônica de um valor de registro, usada só para comparar (bytes separados por vírgula, listas por barra vertical).</summary>
+    /// <param name="v">Valor já convertido para o tipo do registro.</param>
     private static string Describe(object v) => v switch
     {
         byte[] b => string.Join(",", b),
@@ -562,8 +619,14 @@ public sealed class FixEngine
 
     // ------------------------------------------------------------------ privados
 
+    /// <summary>Atalho para gravar um snapshot com as entradas informadas, marcado com a versão atual.</summary>
+    /// <param name="fixes">Entradas (Aplicar ou Desfazer).</param>
+    /// <returns>Caminho do arquivo; null em simulação.</returns>
     private string? SaveSnap(params SnapshotFix[] fixes) => SaveSnap(new Snapshot { Version = AppVersion, Fixes = fixes.ToList() });
 
+    /// <summary>Grava o snapshot e registra no changes.log. Em DryRun não grava nada. É chamado ANTES de alterar o sistema, para o estado anterior existir mesmo se a aplicação falhar no meio.</summary>
+    /// <param name="snap">Snapshot a gravar.</param>
+    /// <returns>Caminho do arquivo; null em simulação.</returns>
     private string? SaveSnap(Snapshot snap)
     {
         if (DryRun) return null;
@@ -572,12 +635,20 @@ public sealed class FixEngine
         return path;
     }
 
+    /// <summary>Adiciona uma mensagem ao resultado (com prefixo de simulação em DryRun) e a registra no changes.log.</summary>
+    /// <param name="r">Resultado em construção.</param>
+    /// <param name="id">Id da otimização.</param>
+    /// <param name="m">Mensagem.</param>
     private void Msg(OpResult r, string id, string m)
     {
         r.Messages.Add(DryRun ? Loc.T("[simulação] ", "[simulation] ") + m : m);
         if (!DryRun) Store.Log($"{id}: {m}");
     }
 
+    /// <summary>Marca o resultado como falho. Acesso negado vira uma mensagem orientando a executar como administrador; outras exceções usam o texto original. A falha também vai para o changes.log.</summary>
+    /// <param name="r">Resultado em construção.</param>
+    /// <param name="id">Id da otimização.</param>
+    /// <param name="ex">Exceção ocorrida.</param>
     private void Fail(OpResult r, string id, Exception ex)
     {
         r.Ok = false;
@@ -587,13 +658,20 @@ public sealed class FixEngine
         if (!DryRun) Store.Log($"{id}: FALHA {ex.Message}");
     }
 
+    /// <summary>Executa uma verificação que não pode derrubar o app: qualquer exceção vira false.</summary>
+    /// <param name="f">Verificação.</param>
     private static bool Try(Func<bool> f) { try { return f(); } catch { return false; } }
 
+    /// <summary>Lança exceção com a saída do processo se um comando externo falhou (código de saída diferente de zero ou tempo esgotado).</summary>
+    /// <param name="r">Resultado do processo.</param>
+    /// <param name="what">Descrição do comando, usada na mensagem.</param>
     private static void Check(Proc.Result r, string what)
     {
         if (!r.Ok) throw new InvalidOperationException(Loc.T($"{what} falhou: {(r.StdOut + " " + r.StdErr).Trim()}", $"{what} failed: {(r.StdOut + " " + r.StdErr).Trim()}"));
     }
 
+    /// <summary>Captura o estado de um serviço: se está em execução (via <c>sc query</c>), o tipo de início e o início atrasado (via registro). Serve para restaurar exatamente como estava.</summary>
+    /// <param name="name">Nome curto do serviço.</param>
     private static SvcState SvcCapture(string name)
     {
         var basePath = @"HKLM:\SYSTEM\CurrentControlSet\Services\" + name;
@@ -628,6 +706,11 @@ public sealed class FixEngine
     public static string SchemeArg(string? scheme) =>
         PowerCfg.ParseSchemeGuid(scheme) is { } g && g.Length == scheme!.Trim().Length ? g : "SCHEME_CURRENT";
 
+    /// <summary>Grava um valor de energia em CA com <c>powercfg /setacvalueindex</c> e reaplica o plano ativo para valer na hora.</summary>
+    /// <param name="sub">GUID do subgrupo.</param>
+    /// <param name="set">GUID da configuração.</param>
+    /// <param name="val">Novo índice.</param>
+    /// <param name="scheme">GUID do plano; null usa o plano atual.</param>
     private static void PowerWrite(string sub, string set, int val, string? scheme = null)
     {
         var sch = SchemeArg(scheme);
@@ -655,6 +738,9 @@ public sealed class FixEngine
         _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown service start type."),
     };
 
+    /// <summary>Confirma no registro que o tipo de início do serviço ficou como esperado; é uma checagem extra depois do <c>sc config</c>, para não reportar sucesso sem efeito.</summary>
+    /// <param name="name">Nome do serviço.</param>
+    /// <param name="expected">Valor "Start" esperado.</param>
     private static void VerifyServiceStart(string name, int expected)
     {
         var now = Reg.GetInt(@"HKLM:\SYSTEM\CurrentControlSet\Services\" + name, "Start");
@@ -662,6 +748,163 @@ public sealed class FixEngine
             throw new InvalidOperationException(Loc.T($"Serviço {name}: o tipo de início continua {now} (esperado {expected}) depois do sc config.", $"Service {name}: the start type is still {now} (expected {expected}) after sc config."));
     }
 
+    /// <summary>
+    /// Executa as ações pontuais (reiniciar o Spooler, limpar a fila de impressão). Não são reversíveis: não há estado anterior a restaurar.
+    /// O Spooler é parado dentro de um bloco protegido e SEMPRE iniciado de novo no fim (inclusive se a limpeza falhar); os serviços dependentes que estavam
+    /// em execução antes são anotados e religados. Em simulação (<see cref="DryRun"/>) nada é lido nem alterado no serviço.
+    /// </summary>
+    /// <param name="fix">Otimização do tipo ação.</param>
+    /// <returns>Mensagens do que foi feito.</returns>
+    private List<string> ActionSteps(FixDefinition fix)
+    {
+        var msgs = new List<string>();
+        if (fix.SpoolerRestart)
+        {
+            List<string> deps = new();
+            if (!DryRun) deps = WithSpoolerStopped(null);
+            msgs.Add(Loc.T("Serviço Spooler: parado e iniciado", "Spooler service: stopped and started"));
+            if (deps.Count > 0) msgs.Add(Loc.T("Serviços dependentes religados: ", "Dependent services started again: ") + string.Join(", ", deps));
+        }
+        if (fix.PrintQueueClear)
+        {
+            var dir = SpoolDirectory;
+            int deleted = 0, failed = 0;
+            List<string> deps = new();
+            if (DryRun) deleted = CountSpoolFiles(dir);
+            else deps = WithSpoolerStopped(() => { (deleted, failed) = ClearSpoolDirectory(dir); });
+            msgs.Add(Loc.T($"Fila de impressão: {deleted} arquivo(s) apagado(s) de {dir}" + (failed > 0 ? $"; {failed} não puderam ser apagados" : ""),
+                $"Print queue: {deleted} file(s) deleted from {dir}" + (failed > 0 ? $"; {failed} could not be deleted" : "")));
+            msgs.Add(Loc.T("Serviço Spooler: parado e iniciado", "Spooler service: stopped and started"));
+            if (deps.Count > 0) msgs.Add(Loc.T("Serviços dependentes religados: ", "Dependent services started again: ") + string.Join(", ", deps));
+        }
+        return msgs;
+    }
+
+    /// <summary>
+    /// Anota os serviços dependentes do Spooler que estão em execução, para religá-los depois; para o Spooler; executa o trabalho opcional; e, no <c>finally</c>,
+    /// inicia o Spooler (verificando RUNNING) e religa os dependentes anotados. Se o trabalho falhar, o erro original é o que sobe, mas o Spooler é iniciado do mesmo jeito.
+    /// </summary>
+    /// <param name="work">Trabalho a fazer com o Spooler parado (null = só reiniciar).</param>
+    /// <returns>Nomes dos serviços dependentes religados.</returns>
+    private static List<string> WithSpoolerStopped(Action? work)
+    {
+        var deps = ParseRunningServices(SafeEnumDepend());
+        var restarted = new List<string>();
+        bool failed = false;
+        try
+        {
+            SpoolerStop();
+            work?.Invoke();
+        }
+        catch (Exception)
+        {
+            failed = true;
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                SpoolerStart();
+                foreach (var d in deps)
+                {
+                    var r = Proc.Run(Proc.Sys32("sc.exe"), "start " + d, 30000);
+                    if (r.Ok || r.ExitCode == 1056) restarted.Add(d);
+                }
+            }
+            catch (Exception) when (failed) { /* mantém o erro original da etapa anterior */ }
+        }
+        return restarted;
+    }
+
+    /// <summary>Saída de <c>sc enumdepend Spooler</c>; texto vazio se a consulta falhar (a lista de dependentes é um extra).</summary>
+    private static string SafeEnumDepend()
+    {
+        try { return Proc.Run(Proc.Sys32("sc.exe"), "enumdepend Spooler", 10000).StdOut; }
+        catch (Exception) { return ""; }
+    }
+
+    /// <summary>
+    /// Interpreta a saída de <c>sc enumdepend</c>/<c>sc query</c> e devolve os nomes (SERVICE_NAME) dos serviços cujo STATE é RUNNING.
+    /// Os rótulos e estados do sc.exe são impressos em inglês em qualquer idioma do Windows.
+    /// </summary>
+    /// <param name="output">Saída do sc.exe.</param>
+    public static List<string> ParseRunningServices(string? output)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(output)) return list;
+        string? current = null;
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.Trim();
+            var m = Regex.Match(line, @"^SERVICE_NAME:\s*(\S+)", RegexOptions.IgnoreCase);
+            if (m.Success) { current = m.Groups[1].Value; continue; }
+            if (current is not null && Regex.IsMatch(line, @"^STATE\s*:\s*\d+\s+RUNNING\b", RegexOptions.IgnoreCase))
+            {
+                if (!list.Contains(current, StringComparer.OrdinalIgnoreCase)) list.Add(current);
+                current = null;
+            }
+        }
+        return list;
+    }
+    /// <summary>Pasta onde o Spooler guarda os trabalhos (%SystemRoot%\System32\spool\PRINTERS).</summary>
+    public static string SpoolDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "spool", "PRINTERS");
+
+    /// <summary>Conta os arquivos da fila de impressão (usado na simulação). Qualquer erro devolve 0.</summary>
+    /// <param name="dir">Pasta da fila.</param>
+    private static int CountSpoolFiles(string dir)
+    {
+        try { return Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Count() : 0; } catch (Exception) { return 0; }
+    }
+
+    /// <summary>Apaga os arquivos (não as subpastas) de uma pasta de fila de impressão. Devolve quantos foram apagados e quantos falharam. Pasta inexistente devolve (0, 0).</summary>
+    /// <param name="dir">Pasta da fila.</param>
+    public static (int Deleted, int Failed) ClearSpoolDirectory(string dir)
+    {
+        int ok = 0, bad = 0;
+        if (!Directory.Exists(dir)) return (0, 0);
+        foreach (var f in Directory.EnumerateFiles(dir))
+        {
+            try { File.Delete(f); ok++; } catch (Exception) { bad++; }
+        }
+        return (ok, bad);
+    }
+
+    /// <summary>true se a saída de <c>sc query Spooler</c> contém a palavra do estado (STOPPED ou RUNNING).</summary>
+    /// <param name="word">Palavra do estado, em inglês como o sc.exe imprime.</param>
+    private static bool SpoolerState(string word) =>
+        Proc.Run(Proc.Sys32("sc.exe"), "query Spooler", 8000).StdOut.Contains(word, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Para o Spooler e espera até 20 s (40 x 500 ms) o estado STOPPED. Tolera "já parado" (1062) e para serviços dependentes se necessário (1051); acesso negado (5) vira UnauthorizedAccessException.</summary>
+    private static void SpoolerStop()
+    {
+        var st = Proc.Run(Proc.Sys32("sc.exe"), "stop Spooler", 30000);
+        if (!st.Ok && st.ExitCode != 1062) // 1062 = já estava parado
+        {
+            if (st.ExitCode == 5) throw new UnauthorizedAccessException("Spooler");
+            if (st.ExitCode == 1051) // serviços dependentes em execução
+                Check(Proc.Run(Proc.Sys32("net.exe"), "stop Spooler /y", 45000), "net stop Spooler");
+            else Check(st, "sc stop Spooler");
+        }
+        for (int i = 0; i < 40 && !SpoolerState("STOPPED"); i++) Thread.Sleep(500);
+        if (!SpoolerState("STOPPED"))
+            throw new InvalidOperationException(Loc.T("O serviço Spooler não parou a tempo.", "The Spooler service did not stop in time."));
+    }
+
+    /// <summary>Inicia o Spooler e espera até 20 s o estado RUNNING. Tolera "já em execução" (1056). Se o estado final não for RUNNING, lança erro claro.</summary>
+    private static void SpoolerStart()
+    {
+        var st = Proc.Run(Proc.Sys32("sc.exe"), "start Spooler", 30000);
+        if (!st.Ok && st.ExitCode != 1056) // 1056 = já estava em execução
+        {
+            if (st.ExitCode == 5) throw new UnauthorizedAccessException("Spooler");
+            Check(st, "sc start Spooler");
+        }
+        for (int i = 0; i < 40 && !SpoolerState("RUNNING"); i++) Thread.Sleep(500);
+        if (!SpoolerState("RUNNING"))
+            throw new InvalidOperationException(Loc.T("O serviço Spooler não voltou ao estado em execução. Inicie-o em services.msc antes de imprimir.", "The Spooler service did not return to the running state. Start it in services.msc before printing."));
+    }
+    /// <summary>Lê as opções do <c>bcdedit /enum {current}</c> em um dicionário nome (minúsculo) para valor. O formato é "nome, dois ou mais espaços, valor" e não depende do idioma.</summary>
     private static Dictionary<string, string> BcdRead()
     {
         var h = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -674,6 +917,9 @@ public sealed class FixEngine
         return h;
     }
 
+    /// <summary>Grava ou remove uma opção do BCD atual. Remover uma opção que não existe não é erro; qualquer outra falha lança exceção.</summary>
+    /// <param name="name">Nome da opção.</param>
+    /// <param name="value">Novo valor; null remove a opção.</param>
     private static void BcdWrite(string name, string? value)
     {
         var args = value is null ? $"/deletevalue {{current}} {name}" : $"/set {{current}} {name} {value}";
@@ -698,8 +944,10 @@ public sealed class FixEngine
     }
 
     // A compressão de memória só é exposta pelos cmdlets do módulo MMAgent (Get/Enable/Disable-MMAgent).
+    /// <summary>Caminho do Windows PowerShell 5.1 (presente em todo Windows 10/11), usado só para os cmdlets de MMAgent.</summary>
     private static string PsExe => Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
 
+    /// <summary>Lê se a compressão de memória está ligada. Null se a saída não for "True" nem "False".</summary>
     private static bool? MmcRead()
     {
         var r = Proc.Run(PsExe, "-NoProfile -NonInteractive -Command \"(Get-MMAgent).MemoryCompression\"", 15000);
@@ -707,12 +955,16 @@ public sealed class FixEngine
         return t.Equals("True", StringComparison.OrdinalIgnoreCase) ? true : t.Equals("False", StringComparison.OrdinalIgnoreCase) ? false : null;
     }
 
+    /// <summary>Liga ou desliga a compressão de memória.</summary>
+    /// <param name="on">true para ligar.</param>
     private static void MmcWrite(bool on)
     {
         var cmd = on ? "Enable-MMAgent -MemoryCompression" : "Disable-MMAgent -MemoryCompression";
         Check(Proc.Run(PsExe, $"-NoProfile -NonInteractive -Command \"{cmd}\"", 30000), cmd);
     }
 
+    /// <summary>Soma o tamanho dos arquivos de uma pasta, em MB, ignorando o que não for acessível. Erros devolvem 0.</summary>
+    /// <param name="dir">Pasta.</param>
     private static double DirMB(string dir)
     {
         try
@@ -728,6 +980,8 @@ public sealed class FixEngine
         catch { return 0; }
     }
 
+    /// <summary>Apaga arquivos e subpastas de uma pasta. O que estiver em uso é ignorado: limpeza de temporários é por melhor esforço e nunca falha o app.</summary>
+    /// <param name="dir">Pasta a limpar.</param>
     private static void CleanDir(string dir)
     {
         if (!Directory.Exists(dir)) return;

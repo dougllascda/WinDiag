@@ -36,6 +36,8 @@ public sealed class ScanSummary
     public List<FindingSummary> Findings { get; set; } = new();
     /// <summary>Nota de configuração da leitura.</summary>
     public int Score { get; set; }
+    /// <summary>Perfil de uso da leitura. Arquivos antigos, sem este campo, são lidos como Jogos. A nota só é comparada com leituras do mesmo perfil.</summary>
+    public UsageProfile Profile { get; set; } = UsageProfile.Gaming;
 }
 
 /// <summary>Mudança de um fato.</summary>
@@ -79,11 +81,16 @@ public sealed class ScanDiff
 /// <summary>Histórico de leituras em %LocalAppData%\WinDiag\history, com comparação entre leituras.</summary>
 public static class ScanHistory
 {
+    /// <summary>Quantidade máxima de leituras mantidas na pasta; as mais antigas são apagadas (limite para não crescer sem fim).</summary>
     private const int MaxFiles = 30;
+    /// <summary>Chave especial (fora de <c>FactDefs</c>) que guarda se a leitura foi feita como administrador ("sim"/"não").</summary>
     private const string AdminKey = "Admin";
+    /// <summary>Chave do fato que lista as fontes de sensores disponíveis na leitura.</summary>
     private const string SensorSourcesKey = "sensorsources";
+    /// <summary>Seções cujo conteúdo muda conforme a leitura seja feita ou não como administrador; ignoradas na comparação quando o modo difere.</summary>
     private static readonly string[] AdminSections = { "armazenamento", "sistema", "seguranca" };
 
+    /// <summary>Opções do JSON do histórico: indentado, sem escape de acentos e com enums gravados como texto (o arquivo continua legível se a ordem do enum mudar).</summary>
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -105,7 +112,8 @@ public static class ScanHistory
             When = DateTime.Now,
             Version = AppInfo.Version,
             Facts = BuildFacts(engine.Facts),
-            Score = GameScore.Compute(all).Score,
+            Profile = engine.Facts.Profile,
+            Score = GameScore.Compute(all, engine.Facts.Profile, engine.WorkReadingsPartial).Score,
         };
         foreach (var f in all)
             s.Findings.Add(new FindingSummary { Key = string.IsNullOrWhiteSpace(f.Id) ? f.Section + ":" + f.Title : f.Id, Section = f.Section, Title = f.Title, Sev = f.Sev, Evidence = f.Evidence });
@@ -113,6 +121,7 @@ public static class ScanHistory
     }
 
     // Chaves estáveis dos fatos (gravadas no JSON) e o rótulo de cada uma nos dois idiomas.
+    /// <summary>Tabela dos fatos: chave estável (gravada), rótulo legado em português (chave de arquivos antigos, para <see cref="NormalizeFacts"/>) e rótulo de exibição em cada idioma.</summary>
     private static readonly (string Key, string Legacy, string Pt, string En)[] FactDefs =
     {
         ("cpu", "CPU", "CPU", "CPU"),
@@ -140,6 +149,8 @@ public static class ScanHistory
         return res;
     }
 
+    /// <summary>Rótulo do fato no idioma atual; chave desconhecida é exibida como está.</summary>
+    /// <param name="key">Chave estável do fato.</param>
     private static string FactLabel(string key)
     {
         foreach (var d in FactDefs) if (d.Key == key) return Loc.T(d.Pt, d.En);
@@ -147,6 +158,9 @@ public static class ScanHistory
     }
 
     // Valores ficam gravados em português (formato neutro); para exibir em inglês, troca os termos conhecidos.
+    /// <summary>Traduz o valor de um fato para exibição. Os valores são gravados em português (formato neutro); em inglês, troca os termos conhecidos e a vírgula decimal.</summary>
+    /// <param name="key">Chave estável do fato.</param>
+    /// <param name="v">Valor gravado.</param>
     private static string FactValue(string key, string v)
     {
         if (Loc.IsPt) return v;
@@ -163,6 +177,8 @@ public static class ScanHistory
         return r;
     }
 
+    /// <summary>Extrai dos fatos o conjunto gravado no histórico. Campos ausentes viram "n/d" e números usam a cultura pt-BR, para que o mesmo PC gere o mesmo texto em qualquer idioma da interface.</summary>
+    /// <param name="f">Fatos da varredura.</param>
     private static Dictionary<string, string> BuildFacts(SystemFacts f)
     {
         var pt = CultureInfo.GetCultureInfo("pt-BR");
@@ -243,6 +259,8 @@ public static class ScanHistory
         return diff;
     }
 
+    /// <summary>Indexa achados pela chave. Se uma chave se repete dentro da mesma leitura, os repetidos passam a usar "chave|título"; em colisão fica o de maior gravidade.</summary>
+    /// <param name="items">Achados de uma leitura.</param>
     private static Dictionary<string, FindingSummary> Index(IEnumerable<FindingSummary> items)
     {
         // Indexa por Id; havendo Ids repetidos na mesma leitura (conteúdo diferente), esses passam a ser indexados por Id|Título.
@@ -257,6 +275,9 @@ public static class ScanHistory
         return d;
     }
 
+    /// <summary>Monta a mudança de um achado a partir do anterior e do atual (qualquer um pode ser null).</summary>
+    /// <param name="p">Achado anterior.</param>
+    /// <param name="c">Achado atual.</param>
     private static FindingChange Change(FindingSummary? p, FindingSummary? c)
     {
         var x = c ?? p!;
@@ -270,7 +291,7 @@ public static class ScanHistory
     {
         dir ??= DefaultDir;
         var current = Summarize(engine);
-        ScanSummary? previous = LoadLatest(dir);
+        ScanSummary? previous = LoadLatest(dir, current.Profile);
         try
         {
             Directory.CreateDirectory(dir);
@@ -284,7 +305,8 @@ public static class ScanHistory
 
     /// <summary>Carrega a leitura mais recente da pasta (ignora arquivos ilegíveis). Null se não houver.</summary>
     /// <param name="dir">Pasta do histórico (padrão: <see cref="DefaultDir"/>).</param>
-    public static ScanSummary? LoadLatest(string? dir = null)
+    /// <param name="profile">Se informado, considera só leituras desse perfil (a nota de Jogos e a de Trabalho não são comparáveis); null aceita qualquer uma.</param>
+    public static ScanSummary? LoadLatest(string? dir = null, UsageProfile? profile = null)
     {
         dir ??= DefaultDir;
         try
@@ -295,7 +317,7 @@ public static class ScanHistory
                 try
                 {
                     var s = JsonSerializer.Deserialize<ScanSummary>(File.ReadAllText(file, Encoding.UTF8), Json);
-                    if (s != null) { s.Facts = NormalizeFacts(s.Facts); return s; }
+                    if (s != null && (profile is null || s.Profile == profile)) { s.Facts = NormalizeFacts(s.Facts); return s; }
                 }
                 catch { /* arquivo ilegível: tenta o próximo */ }
             }
@@ -304,6 +326,8 @@ public static class ScanHistory
         return null;
     }
 
+    /// <summary>Apaga os arquivos de histórico mais antigos além de <c>MaxFiles</c>. O nome (scan_yyyyMMdd_HHmmss) ordena cronologicamente; falha ao apagar é ignorada.</summary>
+    /// <param name="dir">Pasta do histórico.</param>
     private static void Rotate(string dir)
     {
         foreach (var old in Directory.GetFiles(dir, "scan_*.json").OrderByDescending(Path.GetFileName, StringComparer.Ordinal).Skip(MaxFiles))

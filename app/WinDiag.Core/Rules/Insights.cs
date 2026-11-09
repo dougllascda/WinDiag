@@ -20,6 +20,11 @@ public static class Insights
     /// <summary>Título da seção de análise (no idioma atual).</summary>
     public static string SectionTitle => Loc.T("Análise da plataforma", "Platform analysis");
 
+    /// <summary>Resultado da análise do link PCIe usado pelas etapas seguintes (Resizable BAR e upgrade).</summary>
+    /// <param name="ConfigLimited">true se o link atual está abaixo do que o host e a placa de vídeo permitem (configuração, energia ou BIOS).</param>
+    /// <param name="PlatformLimited">true se o limite vem da plataforma (CPU, chipset ou placa).</param>
+    /// <param name="HostMax">Geração máxima que o host informa, se lida.</param>
+    /// <param name="Lanes">Largura do link (número de pistas) considerada.</param>
     private sealed record LinkState(bool ConfigLimited, bool PlatformLimited, int? HostMax, int Lanes);
 
     /// <summary>Gera a seção a partir dos fatos e dos resultados dos coletores. Cada tópico é isolado: falhas viram notas.</summary>
@@ -54,12 +59,22 @@ public static class Insights
 
     // ------------------------------------------------------------------ utilidades
 
+    /// <summary>Devolve o valor se for positivo; zero, negativo e null viram null (o driver costuma devolver 0 para "não lido").</summary>
+    /// <param name="v">Valor lido.</param>
     private static int? Pos(int? v) => v is > 0 ? v : null;
 
+    /// <summary>Texto "Gen N" de uma geração PCIe.</summary>
+    /// <param name="g">Geração.</param>
     private static string GenS(int g) => "Gen " + g;
 
+    /// <summary>Largura de banda do link formatada em GB/s, ou "n/d" se a geração/pistas não constam da tabela.</summary>
+    /// <param name="gen">Geração PCIe.</param>
+    /// <param name="lanes">Número de pistas.</param>
     private static string Bw(int gen, int lanes) => Util.Pcie.Bandwidth(gen, lanes) is { } b ? Fmt.Num(b) + " GB/s" : Fmt.NA;
 
+    /// <summary>Largura de banda como número, sem unidade ("?" se desconhecida), para compor frases do tipo "A para B GB/s".</summary>
+    /// <param name="gen">Geração PCIe.</param>
+    /// <param name="lanes">Número de pistas.</param>
     private static string BwNum(int gen, int lanes) => Util.Pcie.Bandwidth(gen, lanes) is { } b ? Fmt.Num(b) : "?";
 
     /// <summary>Nome curto da CPU: remove marcas registradas, frequência e sufixos de núcleos.</summary>
@@ -74,12 +89,16 @@ public static class Insights
         return Regex.Replace(s, @"\s+", " ").Trim();
     }
 
+    /// <summary>Nome curto da GPU: remove "NVIDIA" e "GeForce" do início.</summary>
+    /// <param name="gpuName">Nome completo.</param>
     private static string GpuShort(string? gpuName)
     {
         if (string.IsNullOrWhiteSpace(gpuName)) return Fmt.NA;
         return Regex.Replace(gpuName, @"^(NVIDIA\s+)?(GeForce\s+)?", "", RegexOptions.IgnoreCase).Trim();
     }
 
+    /// <summary>Prefixo padrão "Onde está o limite:" do texto explicativo, lido depois pelo <see cref="ActionPlan"/>.</summary>
+    /// <param name="element">Elemento que limita (processador, placa, slot...).</param>
     private static string Lim(string element) => Loc.T("Onde está o limite: ", "Where the limit is: ") + element;
 
     /// <summary>Monta a ação no formato "O que dá para melhorar: ... (custo: ...). Ganho esperado: ..." (ou o equivalente em inglês).</summary>
@@ -89,6 +108,14 @@ public static class Insights
 
     // ------------------------------------------------------------------ PCIe
 
+    /// <summary>Analisa a cadeia PCIe da placa de vídeo: GPU, slot, chipset e CPU. Só afirma limite quando a medição do driver concorda com a tabela interna; sem tabela, descreve apenas o que foi medido.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
+    /// <param name="cpu">CPU resolvida (ou null).</param>
+    /// <param name="chip">Chipset resolvido (ou null).</param>
+    /// <param name="gpu">GPU resolvida (ou null).</param>
+    /// <param name="up">Sugestão de upgrade (ou null).</param>
+    /// <returns>Estado do link para as etapas seguintes.</returns>
     private static LinkState PcieChain(SectionResult res, SystemFacts f, CpuSpec? cpu, ChipsetSpec? chip, GpuSpec? gpu, UpgradeSuggestion? up)
     {
         var g = res.Group(Loc.T("Cadeia PCIe da placa de vídeo", "Graphics card PCIe chain"));
@@ -302,6 +329,10 @@ public static class Insights
         return new LinkState(config, platformLimited, host, lanes);
     }
 
+    /// <summary>Descreve o que o chipset suporta no slot x16 para a CPU atual (tabela por geração de CPU, ou "Gen 4 ou Gen 5 conforme a placa").</summary>
+    /// <param name="chip">Chipset.</param>
+    /// <param name="cpu">CPU atual (ou null).</param>
+    /// <param name="chipGen">Geração PCIe do slot para esta combinação.</param>
     private static string IntelChipsetSupports(ChipsetSpec chip, CpuSpec? cpu, int chipGen)
     {
         if (chip.DependsOnBoard) return Loc.T("Gen 4 ou Gen 5 conforme a placa (a tabela só garante Gen 4; o limite é afirmado só com a medição do driver)",
@@ -313,6 +344,12 @@ public static class Insights
 
     // ------------------------------------------------------------------ Memória
 
+    /// <summary>Analisa a memória RAM: velocidade configurada x anunciada x máximo oficial da CPU, dual channel e se o chipset permite o perfil XMP/DOCP/EXPO.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
+    /// <param name="cpu">CPU resolvida (ou null).</param>
+    /// <param name="chip">Chipset resolvido (ou null).</param>
+    /// <param name="up">Sugestão de upgrade (ou null).</param>
     private static void Memory(SectionResult res, SystemFacts f, CpuSpec? cpu, ChipsetSpec? chip, UpgradeSuggestion? up)
     {
         var g = res.Group(Loc.T("Memória RAM", "RAM"));
@@ -467,6 +504,12 @@ public static class Insights
 
     // ------------------------------------------------------------------ Resizable BAR
 
+    /// <summary>Analisa o Resizable BAR: estado medido (BAR1 x VRAM), modo de boot e relação com o link PCIe. Secure Boot é só informado, pois não é requisito.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
+    /// <param name="cpu">CPU resolvida (ou null).</param>
+    /// <param name="gpu">GPU resolvida (ou null).</param>
+    /// <param name="link">Estado do link PCIe.</param>
     private static void ReBar(SectionResult res, SystemFacts f, CpuSpec? cpu, GpuSpec? gpu, LinkState link)
     {
         var g = res.Group("Resizable BAR");
@@ -538,6 +581,11 @@ public static class Insights
 
     // ------------------------------------------------------------------ Equilíbrio
 
+    /// <summary>Avalia o equilíbrio entre CPU e GPU. Limiares: CPU com até 4 núcleos e GPU de faixa intermediária (Tier 2) ou superior sugerem a CPU como primeiro limite; monitores de até 1920x1080 e de até 75,5 Hz indicam folga da GPU. É hipótese pelos dados estáticos (severidade Info), e a captura de stutter confirma ou descarta.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
+    /// <param name="cpu">CPU resolvida (ou null).</param>
+    /// <param name="gpu">GPU resolvida (ou null).</param>
     private static void Balance(SectionResult res, SystemFacts f, CpuSpec? cpu, GpuSpec? gpu)
     {
         var g = res.Group(Loc.T("Equilíbrio do sistema", "System balance"));
@@ -599,6 +647,9 @@ public static class Insights
 
     // ------------------------------------------------------------------ Fonte de alimentação
 
+    /// <summary>Estima o consumo de pico (<see cref="PowerEstimator"/>) e, se o usuário informou a potência da fonte, compara com a recomendada. Sem esse dado só mostra a estimativa; nada é medido.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
     private static void Psu(SectionResult res, SystemFacts f)
     {
         var est = PowerEstimator.Estimate(f);
@@ -664,6 +715,13 @@ public static class Insights
 
     // ------------------------------------------------------------------ Upgrade
 
+    /// <summary>Mostra o caminho de upgrade sem trocar a placa (se houver sugestão) e o ganho de PCIe e memória que ele traria, sempre com a condição a conferir antes de comprar.</summary>
+    /// <param name="res">Seção em construção.</param>
+    /// <param name="f">Fatos coletados.</param>
+    /// <param name="cpu">CPU atual resolvida.</param>
+    /// <param name="gpu">GPU resolvida (ou null).</param>
+    /// <param name="up">Sugestão de upgrade.</param>
+    /// <param name="link">Estado do link PCIe.</param>
     private static void Upgrade(SectionResult res, SystemFacts f, CpuSpec? cpu, GpuSpec? gpu, UpgradeSuggestion? up, LinkState link)
     {
         if (up is null || cpu is null) return;

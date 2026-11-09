@@ -40,6 +40,7 @@ public sealed class LineChart : FrameworkElement
         Unloaded += (_, _) => Themes.ThemeManager.Changed -= OnTheme;
     }
 
+    /// <summary>Redesenha após troca de tema: o <c>OnRender</c> relê os pincéis do tema a cada desenho.</summary>
     private void OnTheme() => InvalidateVisual();
 
     /// <summary>Adiciona uma série e a devolve.</summary>
@@ -68,6 +69,7 @@ public sealed class LineChart : FrameworkElement
         InvalidateVisual();
     }
 
+    /// <summary>Busca um pincel do tema; se o recurso não existir, usa o substituto.</summary>
     private static Brush Res(string key, Brush fallback)
     {
         try { return (Brush)Application.Current.FindResource(key); } catch { return fallback; }

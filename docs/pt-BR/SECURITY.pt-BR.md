@@ -1,6 +1,6 @@
 # Segurança
 
-[English](SECURITY.md) | **Português (Brasil)**
+[English](../../.github/SECURITY.md) | **Português (Brasil)**
 
 ## Princípios
 
@@ -28,7 +28,14 @@ Confirme que o arquivo foi gerado pelo workflow de release deste repositório:
 gh attestation verify .\WinDiag-Setup-<versão>.exe --repo dougllascda/WinDiag
 ```
 
-Veja [docs/SIGNING.md](docs/SIGNING.md) (em inglês) para o estado da assinatura de código e mais detalhes.
+Veja [docs/SIGNING.md](../SIGNING.md) (em inglês) para o estado da assinatura de código e mais detalhes.
+
+## Sobre hashes e atestados
+
+- **SHA256 não é criptografia e não esconde o código.** É uma impressão digital do arquivo, usada para detectar adulteração ou corrupção no download.
+- Quem compilar uma versão modificada gera outro hash, que não bate com o `SHA256SUMS.txt` do release oficial.
+- O **atestado de build** prova que o arquivo saiu do workflow deste repositório. Não dá para forjá-lo sem acesso à conta dona do repositório.
+- A **assinatura digital** acrescenta a identidade do autor (veja [docs/SIGNING.md](../SIGNING.md)).
 
 ## Falsos positivos de antivírus
 

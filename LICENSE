@@ -1,21 +1,66 @@
-MIT License
+WinDiag License
 
-Copyright (c) 2026 dougllascda
+Copyright (c) 2026 dougllascda. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+WinDiag (the "Software") is proprietary, source-available software. The source
+code is visible, but it is not open source. All rights not expressly granted
+below are reserved by dougllascda (the "Owner").
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. PERMITTED USE
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   You may, free of charge:
+   (a) download the official executables published at
+       https://github.com/dougllascda/WinDiag/releases and use them on
+       computers that you own or are authorized to administer, including when
+       providing technical support to third parties, provided that you do not
+       redistribute, resell or charge for the Software itself;
+   (b) read the source code on GitHub; and
+   (c) clone the source code and build it locally, solely to evaluate the
+       Software and to prepare contributions submitted under the Contributor
+       License Agreement (section 5), without distributing the binaries so
+       built.
+
+2. PROHIBITED WITHOUT PRIOR WRITTEN PERMISSION OF THE OWNER
+
+   (a) copying, modifying, adapting, translating or creating derivative works
+       of the source code or of the binaries, except for the local changes
+       needed for the contributions mentioned in section 1(c);
+   (b) redistributing, publishing, sublicensing, selling, renting or including
+       the Software in another product or service, whether free or paid;
+   (c) removing or altering copyright or license notices; and
+   (d) using the name "WinDiag" or its logo for another product.
+
+3. GITHUB
+
+   Viewing and forking the repository within GitHub are permitted by the GitHub
+   Terms of Service. They do not grant any additional right over the code.
+
+4. THIRD-PARTY COMPONENTS
+
+   Third-party components remain under their own licenses. See
+   THIRD-PARTY-NOTICES.md.
+
+5. CONTRIBUTIONS
+
+   Contributions are governed by the Contributor License Agreement in
+   .github/CONTRIBUTING.md.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+   OWNER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE, INCLUDING
+   CHANGES MADE TO YOUR SYSTEM BY ITS OPTIMIZATION FEATURES.
+
+7. TERMINATION
+
+   This license terminates automatically if you violate any of its terms. Upon
+   termination you must stop using the Software and delete all copies.
+
+8. EARLIER VERSIONS
+
+   Earlier versions of the Software that were distributed under a different
+   license keep that license, but only for the copies already obtained.

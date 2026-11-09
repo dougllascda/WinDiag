@@ -27,9 +27,12 @@ public enum ThemeMode
 /// </summary>
 public static class ThemeManager
 {
+    /// <summary>Atributo DWM (Windows 10 20H1 e posteriores/11) que pede barra de título escura.</summary>
     private const int DwmUseImmersiveDarkMode = 20;
+    /// <summary>Valor antigo do mesmo atributo, usado em builds anteriores do Windows 10.</summary>
     private const int DwmUseImmersiveDarkModeOld = 19;
 
+    /// <summary>P/Invoke documentado da Win32 (dwmapi) para escurecer ou clarear a barra de título; o retorno diferente de zero indica falha.</summary>
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
@@ -43,6 +46,7 @@ public static class ThemeManager
         "KnobBrush", "OverlayBrush"
     };
 
+    /// <summary>Cores do tema escuro, na mesma ordem de <see cref="Keys"/>; "#AARRGGBB" quando há transparência.</summary>
     private static readonly string[] DarkColors =
     {
         "#12151A", "#0F1216", "#1A1E25", "#232933", "#2D3440", "#ECEFF4", "#9AA4B2",
@@ -52,6 +56,7 @@ public static class ThemeManager
         "#D0D5DD", "#B3101317"
     };
 
+    /// <summary>Cores do tema claro, na mesma ordem de <see cref="Keys"/>.</summary>
     private static readonly string[] LightColors =
     {
         "#F6F7F9", "#EEF1F5", "#FFFFFF", "#F1F3F6", "#E1E5EA", "#1B1F24", "#5B6676",
@@ -61,9 +66,13 @@ public static class ThemeManager
         "#FFFFFF", "#B3FFFFFF"
     };
 
+    /// <summary>Pincéis vivos por chave. Ficam mutáveis (nunca congelados) para que a troca de tema altere só a cor e todos os controles atualizem ao vivo.</summary>
     private static readonly Dictionary<string, SolidColorBrush> Palette = new();
+    /// <summary>Janelas registradas; referências fracas para não impedir que janelas fechadas sejam coletadas.</summary>
     private static readonly List<WeakReference<Window>> Tracked = new();
+    /// <summary>Garante que <see cref="Initialize"/> rode uma única vez.</summary>
     private static bool _initialized;
+    /// <summary>Cache do ícone (congelado, pode ser compartilhado entre janelas).</summary>
     private static ImageSource? _icon;
 
     /// <summary>Modo escolhido (Automático, Claro ou Escuro).</summary>
@@ -147,6 +156,7 @@ public static class ThemeManager
         if (new WindowInteropHelper(w).Handle != IntPtr.Zero) ApplyTitleBar(w);
     }
 
+    /// <summary>Reaplica as cores do modo atual; se o tema efetivo não mudou, só avisa os ouvintes.</summary>
     private static void Apply()
     {
         bool dark = ResolveDark(Mode);
@@ -171,6 +181,7 @@ public static class ThemeManager
         RaiseChanged();
     }
 
+    /// <summary>Atualiza a barra de título das janelas vivas (descartando as coletadas) e notifica quem redesenha por conta própria.</summary>
     private static void RaiseChanged()
     {
         lock (Tracked)
@@ -181,6 +192,7 @@ public static class ThemeManager
         Changed?.Invoke();
     }
 
+    /// <summary>Reage a mudanças de preferência do Windows (tema dos aplicativos) quando o modo é Automático.</summary>
     private static void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
     {
         if (Mode != ThemeMode.Auto) return;
@@ -191,6 +203,7 @@ public static class ThemeManager
         }));
     }
 
+    /// <summary>Aplica barra de título clara/escura via DWM; sem HWND ainda, o <c>SourceInitialized</c> chama de novo.</summary>
     private static void ApplyTitleBar(Window w)
     {
         try
@@ -205,6 +218,7 @@ public static class ThemeManager
         catch { /* barra de título é cosmética */ }
     }
 
+    /// <summary>Resolve o modo para claro/escuro (Automático consulta o Windows).</summary>
     private static bool ResolveDark(ThemeMode mode) => mode switch
     {
         ThemeMode.Dark => true,
@@ -224,10 +238,12 @@ public static class ThemeManager
         return true;
     }
 
+    /// <summary>Converte "#RRGGBB" ou "#AARRGGBB" em <see cref="Color"/>.</summary>
     private static Color Parse(string hex) => (Color)ColorConverter.ConvertFromString(hex);
 
     // ---------- Preferência ----------
 
+    /// <summary>Lê o modo salvo; valores inválidos ou falha de leitura caem em Automático.</summary>
     private static ThemeMode LoadMode()
     {
         try
@@ -239,5 +255,6 @@ public static class ThemeManager
         return ThemeMode.Auto;
     }
 
+    /// <summary>Grava o modo; <see cref="Prefs.Update"/> não grava se o arquivo estava ilegível.</summary>
     private static void SaveMode(ThemeMode mode) => Prefs.Update(p => p.Theme = mode.ToString());
 }

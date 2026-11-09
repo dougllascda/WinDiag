@@ -12,17 +12,29 @@ public sealed class CaptureView : UserControl, IDisposable
     // Cores: somente chaves do tema (Ui.Res); nenhum valor fixo.
     /// <summary>Seletor de duração: botões de opção estilizados nos dois temas.</summary>
     private readonly StackPanel _dur = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 0) };
+    /// <summary>Inicia a captura (estilo de destaque).</summary>
     private readonly Button _start = new() { Content = Loc.T("Iniciar", "Start"), Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(0, 0, 8, 0), Style = (Style)Application.Current.FindResource("AccentButton") };
+    /// <summary>Interrompe a captura em andamento.</summary>
     private readonly Button _stop = new() { Content = Loc.T("Parar", "Stop"), Padding = new Thickness(16, 6, 16, 6), IsEnabled = false };
+    /// <summary>Contagem regressiva exibida ao lado dos botões.</summary>
     private readonly TextBlock _countdown = new() { Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>Jogo detectado durante a captura (processo com maior uso de GPU 3D).</summary>
     private readonly TextBlock _game = Ui.Muted(Loc.T("Jogo detectado: n/d", "Game detected: n/a"), 13);
+    /// <summary>Gráfico de CPU, GPU 3D, DPC e disco (0–100 %).</summary>
     private readonly LineChart _chart = new() { MaxPoints = 300, YUnit = "%" };
+    /// <summary>Gráfico de RAM disponível em GB; a escala sobe se a leitura passar do total estimado.</summary>
     private readonly LineChart _ramChart = new() { MaxPoints = 300, YUnit = " GB", YFormat = "0.#", MinHeight = 110 };
+    /// <summary>Cabeçalhos da tabela de percentis.</summary>
     private static readonly string[] SummaryColumns = { Loc.T("Métrica", "Metric"), "P50", "P95", "P99", Loc.T("Máx.", "Max.") };
+    /// <summary>Área onde o resumo final é inserido.</summary>
     private readonly StackPanel _result = new();
+    /// <summary>Cancelamento da captura em curso; nulo quando parada.</summary>
     private CancellationTokenSource? _cts;
+    /// <summary>Duração escolhida (s), usada no cálculo do tempo restante.</summary>
     private int _total;
+    /// <summary>true após <see cref="Dispose"/>: impede mexer na interface de uma janela já fechada.</summary>
     private bool _disposed;
+    /// <summary>Fornece a VRAM total para calcular a razão de uso de memória de vídeo.</summary>
     private readonly Func<double?>? _getVram;
 
     /// <summary>Monta a aba de captura.</summary>
@@ -93,6 +105,7 @@ public sealed class CaptureView : UserControl, IDisposable
         catch { return 32; }
     }
 
+    /// <summary>Executa a captura (amostragem em tarefa de fundo); o <see cref="Progress{T}"/> devolve cada amostra à UI thread, onde os gráficos são atualizados.</summary>
     private async Task StartAsync()
     {
         if (_cts is not null) return;
@@ -122,6 +135,7 @@ public sealed class CaptureView : UserControl, IDisposable
         if (sum is not null) ShowSummary(sum);
     }
 
+    /// <summary>Recebe uma amostra por segundo (UI thread) e atualiza gráficos, contagem e jogo detectado.</summary>
     private void OnSample(CaptureSample s)
     {
         _chart.Push(s.CpuPct, s.Gpu3DPct, s.DpcPct, s.DiskBusyPct);
@@ -136,6 +150,7 @@ public sealed class CaptureView : UserControl, IDisposable
             : Loc.T("Jogo detectado: n/d (nenhum processo com uso de GPU 3D)", "Game detected: n/a (no process using the 3D GPU)");
     }
 
+    /// <summary>Monta o cartão de percentis (P50/P95/P99/máx.) e as interpretações; sem afirmar causa, só correlação.</summary>
     private void ShowSummary(CaptureSummary sum)
     {
         var body = new StackPanel();
@@ -162,6 +177,7 @@ public sealed class CaptureView : UserControl, IDisposable
         _result.Children.Add(Ui.Card(body));
     }
 
+    /// <summary>Pede o cancelamento; ignora se a fonte já foi descartada.</summary>
     private void Stop()
     {
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }

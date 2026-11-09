@@ -1,0 +1,40 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../../app",
+          "files": [
+            "WinDiag.Core/WinDiag.Core.csproj",
+            "WinDiag.App/WinDiag.App.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "properties": {
+        "TargetFramework": "net8.0-windows"
+      },
+      "includePrivateMembers": false,
+      "disableGitFeatures": true,
+      "disableDefaultFilter": false
+    }
+  ],
+  "build": {
+    "content": [
+      { "files": ["api/**.yml", "api/index.md"] },
+      { "files": ["toc.yml", "index.md"] },
+      { "src": "..", "files": ["ARCHITECTURE.md", "modules/*.md"], "dest": "articles" }
+    ],
+    "resource": [
+      { "src": "..", "files": ["assets/logo.png"], "dest": "." }
+    ],
+    "dest": "_site",
+    "template": ["default", "modern"],
+    "globalMetadata": {
+      "_appTitle": "WinDiag Developer Docs",
+      "_appName": "WinDiag",
+      "_appFooter": "© 2026 dougllascda. All rights reserved.",
+      "_enableSearch": true
+    }
+  }
+}

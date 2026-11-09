@@ -22,6 +22,24 @@ Principles that guide the code:
 - **No cause is claimed without a measurement.** Findings carry the evidence that was read; the text separates what was measured from what is likely.
 - External processes (`nvidia-smi`, `powercfg`, `bcdedit`, `fltmc`) run through `Util.Proc`, with a timeout and no window.
 
+## Module documents
+
+Each area has its own technical document, including a "How to extend" section:
+
+| Document | Covers |
+|---|---|
+| [Scan engine](modules/scan-engine.md) | Phases A/B/C, `SectionReady`, `SectionCount`, `ProfileOverride` |
+| [Collectors](modules/collectors.md) | `ICollector` contract, each collector and its sources |
+| [Analysis and rules](modules/analysis-and-rules.md) | `Insights`, `PlatformDb`, `GameScore`, `ActionPlan`, `Bottlenecks`, `Scope` |
+| [Optimizations](modules/optimizations.md) | `FixCatalog`, `FixEngine`, states, snapshots, undo |
+| [Sensors](modules/sensors.md) | HWiNFO, LibreHardwareMonitor, PawnIO, `SensorHub`, alerts |
+| [Work profile](modules/work-profile.md) | `WorkCollector`, `BloatwareDb`, `Uninstaller`, battery, printers |
+| [History and report](modules/history-and-report.md) | `ScanHistory`, `ReportWriter`, masks |
+| [User interface](modules/ui.md) | `MainWindow`, tabs, `ThemeManager`, modes, profiles, `Prefs` |
+| [Localization](modules/localization.md) | `Loc.T`, `Fmt`, English tests |
+
+The generated API reference (DocFX) is built from the XML comments in the code; see `docs\api`.
+
 ## Scan phases
 
 `ScanEngine.RunAsync` runs the scan in phases:
@@ -151,13 +169,13 @@ Files `snapshot_yyyyMMdd_HHmmss.json` in `%ProgramData%\WinDiagMaint\snapshots\`
 
 - A single window with tabs: Summary, Platform analysis, Sensors, one tab per collector (CPU, Motherboard, Memory, Graphics, Monitors, Storage, System and security), Optimizations, Game session, Capture and Settings.
 - Inventory tabs are filled by the `SectionReady` event as collectors finish; live values come from `LiveSampler`.
-- `ThemeManager` switches between Automatic (follows Windows), Light and Dark by swapping resource dictionaries (`Themes\*.xaml`).
+- `ThemeManager` switches between Automatic (follows Windows), Light and Dark by updating the brushes of a shared palette in place (`Themes\ThemeManager.cs`; styles in `Themes\Styles.xaml`).
 - The Optimizations tab shows one card per item with a switch, according to the `FixStatus`.
 - Every action that changes the system asks for confirmation and uses `FixEngine`.
 
 ## Test CLI
 
-`WinDiag.Cli` runs the scan and the engine without a UI, which is useful for debugging and local CI. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the commands. The CLI and `--dry-*` never change the system (`FixEngine` is created with `dryRun: true`).
+`WinDiag.Cli` runs the scan and the engine without a UI, which is useful for debugging and local CI. See [CONTRIBUTING.md](https://github.com/dougllascda/WinDiag/blob/main/.github/CONTRIBUTING.md) for the commands. The CLI and `--dry-*` never change the system (`FixEngine` is created with `dryRun: true`).
 
 ## Decisions
 
@@ -167,3 +185,5 @@ Files `snapshot_yyyyMMdd_HHmmss.json` in `%ProgramData%\WinDiagMaint\snapshots\`
 - **`asInvoker` in Debug.** The `app.debug.manifest` manifest runs without elevation to make testing easier; the app reports what was partial ("requires administrator").
 - **Reversibility.** Items with no undo (such as clearing temporary files) are marked not reversible and say so in the UI.
 - **Compatibility.** The snapshot format follows the earlier internal versions, and older snapshots appear in the app.
+
+

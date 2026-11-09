@@ -132,6 +132,7 @@ public static class Ui
 
     // ---------- Modo Simples/Detalhado ----------
 
+    /// <summary>Cache do modo; nulo até a primeira consulta, para ler as preferências só uma vez.</summary>
     private static bool? _simple;
 
     /// <summary>true no modo Simples (padrão); lido de UserPrefs.Mode na primeira consulta.</summary>
@@ -139,6 +140,7 @@ public static class Ui
     {
         get
         {
+            // O padrão é Simples: só "Detailed" (gravado em Configurações) liga o modo técnico.
             _simple ??= !string.Equals(Prefs.Read().Mode, "Detailed", StringComparison.OrdinalIgnoreCase);
             return _simple.Value;
         }
@@ -152,6 +154,7 @@ public static class Ui
     {
         if (Simple == simple) return;
         _simple = simple;
+        // Grava depois de atualizar o cache: se o arquivo estiver ilegível, a escolha vale ao menos na sessão (Prefs.Update avisa).
         Prefs.Update(p => p.Mode = simple ? "Simple" : "Detailed");
         ModeChanged?.Invoke();
     }
@@ -258,7 +261,9 @@ public static class Ui
 /// <summary>Cartão "Ao vivo": campos rótulo/valor atualizados a cada amostra.</summary>
 public sealed class LiveCard : Border
 {
+    /// <summary>Linhas do cartão e a função que extrai o texto de cada uma a partir da amostra.</summary>
     private readonly List<(Grid Row, Func<LiveSample, string> Get)> _fields = new();
+    /// <summary>Painel de conteúdo do cartão (título + linhas).</summary>
     private readonly StackPanel _body = new();
 
     /// <summary>Cria o cartão com os campos informados (rótulo e leitor da amostra).</summary>
@@ -284,6 +289,7 @@ public sealed class LiveCard : Border
     /// <summary>Atualiza todos os campos com a amostra; falhas viram "n/d".</summary>
     public void Update(LiveSample s)
     {
+        // Cada campo é lido isoladamente: uma falha em um não apaga os demais (vira "n/d").
         foreach (var (row, get) in _fields)
         {
             string text;

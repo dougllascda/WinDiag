@@ -10,27 +10,40 @@ namespace WinDiag.Core.Live;
 /// </summary>
 public sealed class GpuLive : IDisposable
 {
+    /// <summary>Campos de consulta do nvidia-smi: temperatura (°C), clock do núcleo e da memória (MHz), potência (W), uso (%), VRAM usada (MiB), ventoinha (%) e P-state.</summary>
     private const string Base = "temperature.gpu,clocks.gr,clocks.mem,power.draw,utilization.gpu,memory.used,fan.speed,pstate";
+    /// <summary>Campos finais da consulta: geração e largura atuais do link PCIe.</summary>
     private const string Tail = "pcie.link.gen.current,pcie.link.width.current";
+    /// <summary>Variantes da consulta: o campo de motivos de limitação foi renomeado de clocks_throttle_reasons para clocks_event_reasons em drivers novos, e a ausência de um deles faz o nvidia-smi rejeitar a linha inteira.</summary>
     private static readonly string[] Variants =
     {
         Base + ",clocks_event_reasons.active," + Tail,
         Base + ",clocks_throttle_reasons.active," + Tail,
     };
 
-    private int _variant = -1;       // variante de consulta que funcionou (-1 = ainda não definida)
-    private int _smiFailures;        // falhas seguidas do nvidia-smi (zera no primeiro sucesso)
-    private long _smiRetryAt;        // Environment.TickCount64 a partir do qual o nvidia-smi é tentado de novo
+    /// <summary>variante de consulta que funcionou (-1 = ainda não definida)</summary>
+    private int _variant = -1;
+    /// <summary>falhas seguidas do nvidia-smi (zera no primeiro sucesso)</summary>
+    private int _smiFailures;
+    /// <summary>Environment.TickCount64 a partir do qual o nvidia-smi é tentado de novo</summary>
+    private long _smiRetryAt;
+    /// <summary>Espera, em ms, antes de tentar o nvidia-smi de novo depois de uma falha (evita criar um processo por segundo).</summary>
     private const int RetryMs = 10000;
+    /// <summary>Timeout, em ms, das tentativas de descobrir a variante de consulta (a primeira chamada pode demorar mais).</summary>
     private const int DiscoveryTimeoutMs = 5000;
+    /// <summary>true se a variante escolhida inclui o campo de motivos de limitação.</summary>
     private bool _hasReasons = true;
 
     /// <summary>Falhas seguidas do nvidia-smi desde a última leitura bem-sucedida.</summary>
     public int SmiFailures => _smiFailures;
 
+    /// <summary>Contadores "GPU Engine" (Utilization Percentage) das instâncias engtype_3D; a soma é o uso 3D da GPU.</summary>
     private List<PerformanceCounter>? _eng;
+    /// <summary>Leituras desde a última recriação dos contadores; a lista é refeita a cada ~30 leituras porque as instâncias (por processo) surgem e somem.</summary>
     private int _engAge;
+    /// <summary>Contadores "GPU Adapter Memory" (Dedicated Usage), em bytes, um por adaptador.</summary>
     private List<PerformanceCounter>? _mem;
+    /// <summary>true se os contadores não existem ou falharam: a GPU deixa de ser lida por eles.</summary>
     private bool _countersDisabled;
 
     /// <summary>
@@ -54,6 +67,7 @@ public sealed class GpuLive : IDisposable
         try { ReadCounters(s); } catch (Exception) { /* GPU fica sem leitura nesta amostra */ }
     }
 
+    /// <summary>Monta a lista de campos da variante v (0 e 1 com motivos de limitação; 2 sem eles).</summary>
     private static string Query(int v)
     {
         if (v == 0) return Variants[0];
@@ -61,6 +75,7 @@ public sealed class GpuLive : IDisposable
         return Base + "," + Tail; // sem motivos de limitação
     }
 
+    /// <summary>Lê a GPU pelo nvidia-smi. Na primeira vez testa as variantes até uma funcionar; depois usa só ela. Devolve false em falha (o chamador usa os contadores).</summary>
     private bool ReadNvidia(string smi, LiveSample s)
     {
         string?[]? row = null;
@@ -98,6 +113,7 @@ public sealed class GpuLive : IDisposable
         return true;
     }
 
+    /// <summary>Executa o nvidia-smi sem janela e devolve a primeira linha já separada em campos; null se falhar ou o número de campos não bater.</summary>
     private static string?[]? Run(string smi, string fields, int timeoutMs)
     {
         var r = Proc.Run(smi, $"--query-gpu={fields} --format=csv,noheader,nounits", timeoutMs, System.Text.Encoding.UTF8);
@@ -108,9 +124,11 @@ public sealed class GpuLive : IDisposable
         return row.Length == fields.Split(',').Length ? row : null;
     }
 
+    /// <summary>Converte texto em número com cultura invariante (o nvidia-smi sempre usa ponto); null se inválido.</summary>
     private static double? D(string? t) =>
         double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
 
+    /// <summary>Lê uso 3D e VRAM pelos contadores de desempenho (GPUs não NVIDIA ou nvidia-smi indisponível).</summary>
     private void ReadCounters(LiveSample s)
     {
         if (_countersDisabled) return;
@@ -142,6 +160,7 @@ public sealed class GpuLive : IDisposable
         catch (Exception) { _countersDisabled = true; }
     }
 
+    /// <summary>Recria a lista de contadores. Se nenhum existir, desativa a leitura por contadores.</summary>
     private void BuildCounters()
     {
         DisposeCounters();
@@ -175,6 +194,7 @@ public sealed class GpuLive : IDisposable
         if (_eng.Count == 0 && _mem.Count == 0) _countersDisabled = true;
     }
 
+    /// <summary>Libera todos os contadores da GPU.</summary>
     private void DisposeCounters()
     {
         if (_eng is not null) foreach (var c in _eng) { try { c.Dispose(); } catch { } }

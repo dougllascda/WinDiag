@@ -31,13 +31,31 @@ public sealed record BiosGuide(BiosTopic Topic, string Vendor, string Title, str
 /// </summary>
 public static class BiosGuides
 {
+    /// <summary>Aviso de que os nomes de menu variam conforme a placa e a versão da BIOS. Entra em todo guia porque os caminhos são genéricos por fabricante, não por modelo.</summary>
     private static string Vary => Loc.T("Os nomes dos menus podem variar conforme o modelo da placa e a versão da BIOS; se não achar o item exato, procure por um nome parecido ou consulte o manual da placa.",
         "Menu names may vary depending on the board model and BIOS version; if you cannot find the exact item, look for a similar name or check the board manual.");
+    /// <summary>Passo final comum a todos os guias: salvar e reiniciar.</summary>
     private static string Save => Loc.T("Aperte F10 para salvar e reiniciar, e confirme.", "Press F10 to save and restart, and confirm.");
+    /// <summary>Orientação padrão para desfazer: anotar o valor antigo, carregar os padrões otimizados e, em último caso, limpar a CMOS. Não depende do fabricante.</summary>
     private static string RevertDefault => Loc.T("Anote o valor antigo antes de mudar. Se o PC não iniciar, entre de novo na BIOS e use Load Optimized Defaults; se nem assim entrar, limpe a CMOS (tire a bateria da placa por alguns minutos ou use o jumper/botão CLR_CMOS do manual).",
         "Write down the old value before changing it. If the PC does not start, enter the BIOS again and use Load Optimized Defaults; if you cannot get in even then, clear the CMOS (remove the board battery for a few minutes or use the CLR_CMOS jumper/button from the manual).");
-    private enum Vendor { Gigabyte, Asus, Msi, AsRock, Generic }
+    /// <summary>Fabricantes de placa-mãe com roteiro próprio; <see cref="Generic"/> cobre os demais.</summary>
+    private enum Vendor
+    {
+        /// <summary>Gigabyte e a linha Aorus.</summary>
+        Gigabyte,
+        /// <summary>ASUS e as linhas ROG, TUF e PRIME.</summary>
+        Asus,
+        /// <summary>MSI (Micro-Star).</summary>
+        Msi,
+        /// <summary>ASRock.</summary>
+        AsRock,
+        /// <summary>Fabricante não identificado: guia com instruções gerais.</summary>
+        Generic
+    }
 
+    /// <summary>Identifica o fabricante pelo texto do modelo/fabricante da placa (comparação sem diferenciar maiúsculas). Marcas de linha (ROG, TUF, PRIME, AORUS) também contam, porque o WMI nem sempre traz o nome da empresa.</summary>
+    /// <param name="board">Fabricante ou modelo da placa; null ou vazio resulta em genérico.</param>
     private static Vendor Detect(string? board)
     {
         if (string.IsNullOrWhiteSpace(board)) return Vendor.Generic;
@@ -49,6 +67,8 @@ public static class BiosGuides
         return Vendor.Generic;
     }
 
+    /// <summary>Nome do fabricante exibido no guia.</summary>
+    /// <param name="v">Fabricante.</param>
     private static string VendorName(Vendor v) => v switch
     {
         Vendor.Gigabyte => "Gigabyte / Aorus",
@@ -58,6 +78,8 @@ public static class BiosGuides
         _ => Loc.T("Genérico", "Generic")
     };
 
+    /// <summary>Tecla para entrar na BIOS conforme o fabricante. Valores comuns de cada marca; o genérico manda conferir a tela de logotipo ou o manual.</summary>
+    /// <param name="v">Fabricante.</param>
     private static string EnterKey(Vendor v) => v switch
     {
         Vendor.Gigabyte => Loc.T("Del (ou F2) logo ao ligar o PC", "Del (or F2) right after powering on the PC"),
@@ -67,6 +89,8 @@ public static class BiosGuides
         _ => Loc.T("Del ou F2 logo ao ligar o PC (veja a tecla na tela de logotipo ou no manual)", "Del or F2 right after powering on the PC (see the key on the logo screen or in the manual)")
     };
 
+    /// <summary>Como sair do modo simples da BIOS para o avançado, onde ficam as opções dos guias.</summary>
+    /// <param name="v">Fabricante.</param>
     private static string Advanced(Vendor v) => v switch
     {
         Vendor.Gigabyte => Loc.T("Se abrir o modo simples, aperte F2 para o modo avançado.", "If it opens in simple mode, press F2 for advanced mode."),
@@ -104,6 +128,13 @@ public static class BiosGuides
         return Enum.TryParse(topic.Trim(), ignoreCase: true, out t) && Enum.IsDefined(t);
     }
 
+    /// <summary>Monta um guia completo: os passos fixos de entrada na BIOS e modo avançado, os passos específicos do assunto, o salvamento e o aviso de variação de menus.</summary>
+    /// <param name="topic">Assunto.</param>
+    /// <param name="v">Fabricante.</param>
+    /// <param name="title">Título do guia.</param>
+    /// <param name="mid">Passos específicos do assunto, sem numeração.</param>
+    /// <param name="revert">Como desfazer; null usa <see cref="RevertDefault"/>.</param>
+    /// <param name="caution">Cuidado; null usa o aviso padrão de mexer só no item descrito.</param>
     private static BiosGuide Make(BiosTopic topic, Vendor v, string title, List<string> mid, string? revert = null, string? caution = null)
     {
         var steps = new List<string>
@@ -118,6 +149,8 @@ public static class BiosGuides
             caution ?? Loc.T("Mexa só no item descrito e anote o valor antigo. Não altere tensões nem outras opções que você não conheça.", "Change only the item described and write down the old value. Do not change voltages or other options you are not familiar with."));
     }
 
+    /// <summary>Guia para ajustar a geração do slot PCIe da placa de vídeo (item de configuração de PCIe/slot na BIOS).</summary>
+    /// <param name="v">Fabricante.</param>
     private static BiosGuide PcieSlot(Vendor v)
     {
         string title = Loc.T("Ajustar a geração do slot PCIe da placa de vídeo", "Adjust the graphics card PCIe slot generation");
@@ -155,6 +188,8 @@ public static class BiosGuides
             caution: Loc.T("Se a opção estiver em Auto e o link ainda for baixo, verifique se a placa está bem encaixada no slot principal e se não há cabo extensor (riser). Se a opção não existir, atualize a BIOS; veja o guia de atualização.", "If the option is on Auto and the link is still low, check that the card is well seated in the main slot and that there is no extender cable (riser). If the option does not exist, update the BIOS; see the update guide."));
     }
 
+    /// <summary>Guia para ligar Above 4G Decoding e Resizable BAR (exige boot UEFI; o CSM ligado costuma impedir).</summary>
+    /// <param name="v">Fabricante.</param>
     private static BiosGuide ReBar(Vendor v)
     {
         string title = Loc.T("Ligar o Resizable BAR (e o Above 4G Decoding)", "Turn on Resizable BAR (and Above 4G Decoding)");
@@ -196,6 +231,8 @@ public static class BiosGuides
             caution: Loc.T("Esse recurso exige Windows instalado em modo UEFI/GPT, placa de vídeo e processador compatíveis e, em placas mais antigas, uma BIOS atualizada. Com o Windows no modo legado, desligar o CSM pode impedir o PC de iniciar; nesse caso, volte o CSM para o valor antigo.", "This feature requires Windows installed in UEFI/GPT mode, a compatible graphics card and processor and, on older boards, an updated BIOS. With Windows in legacy mode, turning off CSM can prevent the PC from starting; in that case, set CSM back to the old value."));
     }
 
+    /// <summary>Guia para ativar o perfil de memória XMP (Intel), DOCP ou EXPO (AMD), que faz a RAM trabalhar na velocidade anunciada.</summary>
+    /// <param name="v">Fabricante.</param>
     private static BiosGuide Xmp(Vendor v)
     {
         string title = Loc.T("Ligar o perfil de memória (XMP / DOCP / EXPO)", "Turn on the memory profile (XMP / DOCP / EXPO)");
@@ -235,6 +272,8 @@ public static class BiosGuides
             caution: Loc.T("O perfil roda a memória fora do padrão do processador, o que é aceito pelo fabricante da memória, mas não é garantido em todas as combinações. Se o PC travar ou não iniciar, volte a Auto ou use Load Optimized Defaults.", "The profile runs the memory outside the processor's default, which the memory manufacturer supports, but it is not guaranteed in every combination. If the PC freezes or does not start, go back to Auto or use Load Optimized Defaults."));
     }
 
+    /// <summary>Guia para ligar a virtualização (Intel VT-x / AMD SVM), necessária a emuladores e máquinas virtuais.</summary>
+    /// <param name="v">Fabricante.</param>
     private static BiosGuide Virtualization(Vendor v)
     {
         string title = Loc.T("Ligar a virtualização do processador (VT-x / SVM)", "Turn on processor virtualization (VT-x / SVM)");
@@ -270,6 +309,8 @@ public static class BiosGuides
             caution: Loc.T("Isso só é necessário para usar máquinas virtuais, WSL ou emuladores. Para jogar normalmente não é preciso, e ligar a virtualização pode ativar recursos de segurança do Windows que custam um pouco de desempenho.", "This is only needed to use virtual machines, WSL or emulators. It is not needed for normal gaming, and turning on virtualization can enable Windows security features that cost a bit of performance."));
     }
 
+    /// <summary>Guia de atualização da BIOS. É o mais arriscado: enfatiza usar o arquivo do fabricante para o modelo exato e não desligar o PC durante o processo.</summary>
+    /// <param name="v">Fabricante.</param>
     private static BiosGuide BiosUpdate(Vendor v)
     {
         string title = Loc.T("Atualizar a BIOS", "Update the BIOS");

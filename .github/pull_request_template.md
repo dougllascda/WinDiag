@@ -8,6 +8,10 @@
 - [ ] `dotnet test app\WinDiag.sln` passing
 - [ ] Tested with the CLI (`--dump`, `--fixes`, `--dry-*`), when applicable
 
+## Contributor License Agreement
+
+- [ ] I have read and agree to the Contributor License Agreement in CONTRIBUTING.md
+
 ## Checklist
 
 - [ ] User-facing text in both languages (`Loc.T(pt, en)`), pt-BR with correct accents

@@ -17,6 +17,7 @@ public static class Fmt
     /// <summary>Texto para valor indisponível no idioma atual ("n/d" ou "n/a").</summary>
     public static string NA => Loc.IsPt ? "n/d" : "n/a";
 
+    /// <summary>Formato de data do idioma atual. Em inglês usa ano-mês-dia para evitar a ambiguidade entre mês/dia e dia/mês.</summary>
     private static string DateFmt => Loc.IsPt ? "dd/MM/yyyy" : "yyyy-MM-dd";
 
     /// <summary>Formata qualquer valor: null/vazio vira <see cref="NA"/>, booleano vira "sim"/"não" ("yes"/"no"), números e datas seguem o idioma.</summary>

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.Eventing.Reader;
+using System.Diagnostics.Eventing.Reader;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -17,6 +17,13 @@ public sealed class EventsCollector : ICollector
     /// <inheritdoc/>
     public string Title => Loc.T("Eventos do Windows", "Windows events");
 
+    /// <summary>Evento lido do log, com a mensagem formatada sob demanda.</summary>
+    /// <param name="Log">Nome do log (System ou Application).</param>
+    /// <param name="Provider">Provedor (fonte) do evento.</param>
+    /// <param name="Id">ID do evento.</param>
+    /// <param name="Level">Nível (1 crítico, 2 erro, 3 aviso, 4 informação).</param>
+    /// <param name="Time">Data e hora local de criação.</param>
+    /// <param name="Message">Obtém o texto já formatado (vazio se o provedor não registra texto).</param>
     private sealed record Ev(string Log, string Provider, int Id, int Level, DateTime Time, Func<string> Message);
 
     /// <inheritdoc/>
@@ -52,7 +59,9 @@ public sealed class EventsCollector : ICollector
         return ("OTHER", "");
     }
 
+    /// <summary>Teto de eventos lidos por log desde o boot (limita tempo e memória; se atingido, a contagem é mostrada como "N+").</summary>
     private const int BootCap = 300;
+    /// <summary>Teto de eventos de estabilidade lidos nos últimos 7 dias.</summary>
     private const int StabilityCap = 400;
 
     /// <summary>Texto de contagem: o número exato, ou "N+" quando a leitura atingiu o teto (o total real pode ser maior).</summary>
@@ -62,8 +71,10 @@ public sealed class EventsCollector : ICollector
     internal static string CountText(int count, bool capped, int cap) =>
         capped ? cap.ToString(System.Globalization.CultureInfo.InvariantCulture) + "+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>Formata a data no padrão UTC exigido pelo XPath de EventLogQuery (SystemTime em UTC, milissegundos zerados).</summary>
     private static string XTime(DateTime local) => local.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.000'Z'", System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>Consulta o log (mais recentes primeiro) com um filtro XPath e lê até <paramref name="max"/> eventos. Falha de leitura (ex.: log protegido sem administrador) vira nota e devolve o que foi lido.</summary>
     private static List<Ev> Read(string log, string xpath, int max, SectionResult res)
     {
         var list = new List<Ev>();
@@ -90,17 +101,20 @@ public sealed class EventsCollector : ICollector
         return list;
     }
 
+    /// <summary>Colapsa espaços/quebras de linha e trunca a mensagem para caber na tabela.</summary>
     private static string Clean(string s, int max)
     {
         s = Regex.Replace(s, @"\s+", " ").Trim();
         return s.Length > max ? s[..max] + "..." : s;
     }
 
+    /// <summary>Erros críticos e de erro (Level 1 ou 2) desde o último boot, nos logs System e Application, agrupados por provedor e ID (12 mais frequentes).</summary>
     private static void Boot(SectionResult res)
     {
         DateTime boot;
         var os = Wmi.First("SELECT LastBootUpTime FROM Win32_OperatingSystem");
         var lb = Fmt.ParseWmiDate(os?.P("LastBootUpTime"));
+        // Win32_OperatingSystem.LastBootUpTime é mais fiel que o tempo do processo; este só é usado se o WMI falhar.
         if (lb != null) boot = lb.Value;
         else
         {
@@ -108,6 +122,7 @@ public sealed class EventsCollector : ICollector
             res.Note(Loc.T("Hora do boot (Win32_OperatingSystem) indisponível; usado o tempo ligado do processo.", "Boot time (Win32_OperatingSystem) unavailable; process uptime used instead."));
         }
 
+        // Level 1 = Crítico, 2 = Erro (Level 3 = aviso fica de fora). O filtro por data usa UTC.
         var xp = $"*[System[(Level=1 or Level=2) and TimeCreated[@SystemTime>='{XTime(boot)}']]]";
         var all = new List<Ev>();
         bool capped = false;
@@ -153,6 +168,7 @@ public sealed class EventsCollector : ICollector
                 simple: Loc.T("O Windows registrou erros desde que o PC ligou. Nem todo erro é grave; a lista mostra de onde cada um veio.", "Windows logged errors since the PC was turned on. Not every error is serious; the list shows where each one came from."));
     }
 
+    /// <summary>Eventos dos últimos 7 dias ligados a engasgos: TDR de vídeo (Display 4101), erros de disco/volume (nível erro ou pior), WHEA e Kernel-Power 41. Avisa se houver algum.</summary>
     private static void Stability(SectionResult res)
     {
         var since = DateTime.Now.AddDays(-7);
@@ -162,6 +178,7 @@ public sealed class EventsCollector : ICollector
         var raw = Read("System", xp, StabilityCap, res);
         bool capped = raw.Count >= StabilityCap;
 
+        // Filtro fino depois do XPath: 4101 é o evento de TDR ("driver parou de responder e se recuperou"); disco só conta nível <= 3 para ignorar ruído informativo.
         var ev = raw.Where(e =>
             (Regex.IsMatch(e.Provider, "Display|nvlddmkm", RegexOptions.IgnoreCase) && e.Id == 4101) ||
             (Regex.IsMatch(e.Provider, "^(disk|storahci|stornvme|volmgr)$", RegexOptions.IgnoreCase) && e.Level <= 3) ||

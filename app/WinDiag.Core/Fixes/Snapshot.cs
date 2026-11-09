@@ -61,6 +61,8 @@ public sealed class FixState
     public RegState? Hib { get; set; }
     /// <summary>Valores de energia anteriores.</summary>
     public List<PowerState> Power { get; set; } = new();
+    /// <summary>GUID do plano de energia ativo anterior (null = não capturado). Usado pelo item POWER_PLAN_WORK.</summary>
+    public string? PowerPlan { get; set; }
 }
 
 /// <summary>Estado anterior de um serviço do Windows.</summary>

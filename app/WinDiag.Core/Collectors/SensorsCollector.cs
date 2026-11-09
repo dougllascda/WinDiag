@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Sensors;
 using WinDiag.Core.Util;
@@ -13,7 +13,9 @@ namespace WinDiag.Core.Collectors;
 /// </summary>
 public sealed class SensorsCollector : ICollector
 {
+    /// <summary>Fonte de leituras injetada em testes; null = usa o <see cref="SensorHub"/> real.</summary>
     private readonly Func<(SensorSnapshot Snapshot, SensorStatus Status)>? _provider;
+    /// <summary>Discos físicos injetados em testes; null = lê MSFT_PhysicalDisk pelo WMI.</summary>
     private readonly Func<IReadOnlyCollection<DiskInfo>?>? _diskProvider;
 
     /// <summary>
@@ -106,9 +108,11 @@ public sealed class SensorsCollector : ICollector
 
     // ------------------------------------------------------------------ tabelas
 
+    /// <summary>Ordem de exibição das categorias de peça nas tabelas.</summary>
     private static readonly string[] KindOrder =
         { HardwareClassifier.Cpu, HardwareClassifier.Gpu, HardwareClassifier.Board, HardwareClassifier.Memory, HardwareClassifier.Storage, HardwareClassifier.Psu, HardwareClassifier.Controller, HardwareClassifier.Other };
 
+    /// <summary>Monta uma tabela por peça (Sensor, Valor, Origem) e o grupo com a situação das fontes de leitura e orientações.</summary>
     private static void BuildGroups(SectionResult res, SensorSnapshot snap, SensorStatus status)
     {
         var byPiece = snap.Readings
@@ -150,6 +154,7 @@ public sealed class SensorsCollector : ICollector
         return Fmt.Num(r.Value, dec) + (string.IsNullOrEmpty(r.Unit) ? "" : " " + r.Unit);
     }
 
+    /// <summary>Lê modelo, barramento e tipo de mídia dos discos (WMI MSFT_PhysicalDisk, root\Microsoft\Windows\Storage) para escolher o limiar de temperatura. BusType 17 = NVMe; MediaType 3 = HDD. Falha vira nota e devolve null.</summary>
     private static List<DiskInfo>? ReadDisks(SectionResult res)
     {
         string? err = null;
@@ -180,6 +185,7 @@ public sealed class SensorsCollector : ICollector
         return sb.ToString();
     }
 
+    /// <summary>Casamento tolerante de nomes normalizados (um contém o outro); ignora nomes curtos demais (menos de 4 caracteres) para evitar falsos positivos.</summary>
     private static bool DiskNameMatches(string a, string b)
     {
         if (a.Length < 4 || b.Length < 4) return false;
@@ -188,16 +194,23 @@ public sealed class SensorsCollector : ICollector
 
     // ------------------------------------------------------------------ regras
 
+    /// <summary>Sensores de temperatura que são limites (TjMax, crítico, distância até o limite, máx./mín.), e não medições; são descartados.</summary>
     private static readonly Regex ThresholdRx = new(@"warning|critical|threshold|limit|tjmax|t\s?junction\s?max|distance|\bmax\b|\bmin\b|alarm|aviso|crítica", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>Sensor de hot spot/junção da GPU, tratado à parte do núcleo.</summary>
     private static readonly Regex HotSpotRx = new(@"hot\s?spot|junction", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>Sensor de temperatura da memória da GPU (junção da VRAM), que não representa o núcleo.</summary>
     private static readonly Regex MemJunctionRx = new(@"mem(ory)?", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>Número de 3 ou 4 dígitos do nome da fonte, com prefixo (0 a 4 letras) e sufixo (0 a 3 letras) opcionais, isolado de outros caracteres alfanuméricos.</summary>
     private static readonly Regex PsuModelRx = new(@"(?<![A-Za-z0-9])([A-Za-z]{0,4})(\d{3,4})([A-Za-z]{0,3})(?![A-Za-z0-9])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>true se é uma medição de temperatura plausível: entre 0 e 150 °C (exclusive) e que não seja um sensor de limite.</summary>
     private static bool IsTemp(SensorReading r) =>
         r.Kind == SensorKind.Temperature && r.Value > 0 && r.Value < 150 && !ThresholdRx.IsMatch(r.Name);
 
+    /// <summary>Sensores preferidos para a CPU: Package (Intel), Tctl/Tdie (AMD), que representam o processador como um todo.</summary>
     private static readonly Regex CpuPreferredRx = new(@"package|tctl|tdie", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>true se o sensor da GPU não é hot spot nem junção da memória, isto é, representa o núcleo.</summary>
     private static bool IsGpuCore(SensorReading r) => !HotSpotRx.IsMatch(r.Name) && !MemJunctionRx.IsMatch(r.Name);
 
     /// <summary>Leitura de CPU usada nos alertas: prefere Package/Tctl/Tdie; sem elas, a maior entre as demais (limiares como TjMax/Critical/Max são ignorados).</summary>
@@ -243,6 +256,7 @@ public sealed class SensorsCollector : ICollector
         {
             var top = cpuTop;
             facts.CpuTempC = Math.Round(top.Value, 1);
+            // Limiares de CPU: >= 90 °C muito alta (Atenção) e >= 80 °C elevada (Aviso). São referências práticas do WinDiag, não limites de fabricante, e uma leitura única não prova throttling.
             string ev = Loc.T($"{top.Name}: {Fmt.Num(top.Value, 0)} °C (leitura única; fonte: {top.Source})", $"{top.Name}: {Fmt.Num(top.Value, 0)} °C (single reading; source: {top.Source})");
             if (top.Value >= 90)
                 res.Find(Severity.Atencao, Loc.T("Temperatura da CPU muito alta", "CPU temperature very high"), ev,
@@ -376,6 +390,7 @@ public sealed class SensorsCollector : ICollector
     /// <summary>Temperatura mínima (°C) da peça para o alerta de ventoinha parada.</summary>
     private const double FanTempCut = 70;
 
+    /// <summary>Cabeçalhos de ventoinha opcionais (OPT, SYS_FAN, AIO, bomba, chassis) que costumam ficar sem ventoinha ligada e marcam 0 RPM sem ser defeito.</summary>
     private static readonly Regex OptionalFanRx = new(@"\bopt\b|opt_?\d|sys_?fan|aio|pump|chassis|\bcase\b", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>Chave de comparação: só letras e dígitos, minúsculas.</summary>
@@ -398,6 +413,7 @@ public sealed class SensorsCollector : ICollector
         return piece == HardwareClassifier.Cpu ? k is "cpufan" or "cpu" : k.Contains("gpu", StringComparison.Ordinal);
     }
 
+    /// <summary>Prefixos típicos de modelos de fonte (Corsair RM/HX/AX/SF/CX/TX, EVGA/Seasonic etc.) que dão confiança à potência extraída do nome.</summary>
     private static readonly string[] PsuPrefixes = { "RM", "HX", "AX", "SF", "CX", "TX", "VS", "GF", "MWE" };
 
     /// <summary>

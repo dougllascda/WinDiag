@@ -10,15 +10,24 @@ namespace WinDiag.App.Views;
 /// <summary>Aba "Plano de ação": passos numerados, do mais simples e grátis ao que exige trocar peça.</summary>
 public sealed class PlanView : UserControl
 {
+    /// <summary>Cultura do idioma atual, para numerar e contar com o formato correto.</summary>
     private static CultureInfo Pt => Loc.Culture;
 
+    /// <summary>Abre uma aba pela chave interna (ex.: "optimizations").</summary>
     private readonly Action<string> _goTo;
+    /// <summary>Contêiner dos passos; reconstruído a cada mudança.</summary>
     private readonly StackPanel _list = new();
+    /// <summary>Texto "N de M concluídos".</summary>
     private readonly TextBlock _counter = new() { FontWeight = FontWeights.SemiBold };
+    /// <summary>Barra de progresso (0 a 1) dos passos concluídos.</summary>
     private readonly ProgressBar _bar = new() { Height = 8, Minimum = 0, Maximum = 1, Margin = new Thickness(0, 6, 0, 0) };
+    /// <summary>Cartão do contador e da barra; oculto quando não há passos.</summary>
     private readonly Border _progressCard;
+    /// <summary>Passos do plano da última varredura.</summary>
     private List<ActionStep> _steps = new();
+    /// <summary>Ids das otimizações que o app sabe aplicar; o botão "Aplicar otimização" só aparece para elas.</summary>
     private HashSet<string> _available = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>false até a primeira varredura terminar (mostra "Aguardando a leitura...").</summary>
     private bool _loaded;
 
     /// <summary>Disparado quando o usuário marca ou desmarca um passo (a Visão geral atualiza os "Próximos passos").</summary>
@@ -61,6 +70,7 @@ public sealed class PlanView : UserControl
     /// <summary>Reconstrói a lista (ex.: depois de trocar o modo Simples/Detalhado).</summary>
     public void RefreshView() => Rebuild();
 
+    /// <summary>Reconstrói contador, barra e grupos (grátis primeiro, depois hardware); passos feitos descem para o fim do grupo.</summary>
     private void Rebuild()
     {
         _list.Children.Clear();
@@ -82,6 +92,7 @@ public sealed class PlanView : UserControl
         AddGroup("Exige hardware", "Requires hardware", ActionCost.Hardware);
     }
 
+    /// <summary>Adiciona um grupo de custo (título, contagem e cartões), se houver passos nele.</summary>
     private void AddGroup(string ptTitle, string enTitle, ActionCost cost)
     {
         var items = _steps.Where(s => s.Cost == cost)
@@ -98,6 +109,7 @@ public sealed class PlanView : UserControl
         foreach (var s in items) _list.Children.Add(BuildCard(s));
     }
 
+    /// <summary>Monta o cartão de um passo; marcar "Feito" grava em <see cref="PlanStore"/> e avisa a Visão geral.</summary>
     private Border BuildCard(ActionStep s)
     {
         bool done = PlanStore.IsDone(s.Key);

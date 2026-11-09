@@ -18,6 +18,7 @@ public sealed record PowerEstimate(int CpuW, int GpuW, int RestW, int PeakW, int
 /// </summary>
 public static class PowerEstimator
 {
+    /// <summary>Opções padrão das expressões regulares: sem diferenciar maiúsculas e independentes da cultura.</summary>
     private const RegexOptions Rx = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
     /// <summary>Potência gráfica típica (TGP) por modelo. Padrões mais específicos vêm antes.</summary>
@@ -107,6 +108,7 @@ public static class PowerEstimator
         return new PowerEstimate(cpu, gpu, rest, peak, rec, basis);
     }
 
+    /// <summary>Padrões de GPU integrada (Intel UHD/Iris/Arc integrada, AMD Radeon Graphics e Vega integrada). O padrão da Arc exclui modelos A### e B###, que são placas dedicadas.</summary>
     private static readonly Regex[] IntegratedPatterns =
     {
         new(@"Intel.*\b(UHD|Iris|HD)\b.*Graphics|Intel.*Iris", Rx),
@@ -126,11 +128,15 @@ public static class PowerEstimator
         return false;
     }
 
+    /// <summary>TDP da CPU pela base de plataformas; qualquer exceção devolve null para a estimativa seguir com o valor padrão.</summary>
+    /// <param name="cpuName">Nome da CPU.</param>
     private static int? SafeTdp(string? cpuName)
     {
         try { return PlatformDb.ResolveCpu(cpuName)?.TdpW; } catch { return null; }
     }
 
+    /// <summary>Potência típica da GPU pela tabela interna (primeiro padrão que casar); null se o modelo não consta.</summary>
+    /// <param name="name">Nome da GPU.</param>
     private static int? GpuFromTable(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;

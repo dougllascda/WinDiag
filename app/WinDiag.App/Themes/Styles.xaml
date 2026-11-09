@@ -6,6 +6,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- Fontes: ícones Segoe Fluent (Windows 11) com recuo para Segoe MDL2 (Windows 10); texto com Segoe UI Variable quando disponível. -->
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
@@ -93,7 +94,7 @@
         </Setter>
     </Style>
 
-    <!-- Barra de rolagem -->
+    <!-- Barra de rolagem (fina; a cor do polegar vem do tema). A rolagem suave da roda é feita em código (SmoothScroll.cs). -->
     <Style x:Key="ThumbStyle" TargetType="Thumb">
         <Setter Property="Template">
             <Setter.Value>
@@ -231,7 +232,7 @@
         </Setter>
     </Style>
 
-    <!-- Interruptor (aba Otimizações) -->
+    <!-- Interruptor (aba Otimizações): o estado "ligado" usa o pincel de destaque e desloca o botão para a direita. -->
     <Style x:Key="SwitchToggle" TargetType="ToggleButton">
         <Setter Property="Width" Value="42" />
         <Setter Property="Height" Value="22" />
@@ -326,7 +327,7 @@
         </Setter>
     </Style>
 
-    <!-- Lista suspensa -->
+    <!-- Lista suspensa: o item destacado/selecionado usa HoverBrush/SelectedBrush; o popup refaz o visual com cantos arredondados. -->
     <Style TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="Padding" Value="10,6" />
@@ -412,7 +413,7 @@
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
-    <!-- TabControl com abas na lateral -->
+    <!-- TabControl com abas na lateral: a coluna da esquerda tem largura fixa e rola se houver muitas abas; o conteúdo selecionado ocupa o resto. -->
     <Style TargetType="TabControl">
         <Setter Property="TabStripPlacement" Value="Left" />
         <Setter Property="Background" Value="{DynamicResource BgBrush}" />
@@ -468,7 +469,7 @@
         </Setter>
     </Style>
 
-    <!-- DataGrid -->
+    <!-- DataGrid somente leitura (tabelas das seções): sem rolagem vertical interna, a roda é repassada à aba (ver Ui.Table). -->
     <Style TargetType="DataGrid">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />

@@ -19,13 +19,18 @@ public static class SmoothScroll
     /// <summary>Fração do caminho restante percorrida por segundo (meia-vida curta, ~70 ms).</summary>
     private const double Speed = 10;
 
+    /// <summary>Estado por ScrollViewer: destino acumulado, se o laço de quadros está ativo e o instante do último quadro.</summary>
     private sealed class State
     {
+        /// <summary>Deslocamento vertical que a rolagem deve alcançar (NaN = parado).</summary>
         public double Target;
+        /// <summary>true enquanto o handler de <c>CompositionTarget.Rendering</c> está assinado.</summary>
         public bool Running;
+        /// <summary>Tempo de renderização do quadro anterior, para calcular o delta real entre quadros.</summary>
         public TimeSpan Last;
     }
 
+    /// <summary>Propriedade anexada que guarda o <see cref="State"/> no próprio ScrollViewer (sem dicionário global, nada vaza).</summary>
     private static readonly DependencyProperty StateProperty =
         DependencyProperty.RegisterAttached("SmoothScrollState", typeof(State), typeof(SmoothScroll));
 
@@ -37,6 +42,7 @@ public static class SmoothScroll
         sv.PreviewMouseWheel += OnWheel;
     }
 
+    /// <summary>Trata a roda: acumula o destino e, se preciso, inicia o laço de quadros que anima a aproximação.</summary>
     private static void OnWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not ScrollViewer sv || sv.ScrollableHeight <= 0) return;
@@ -75,6 +81,7 @@ public static class SmoothScroll
         CompositionTarget.Rendering += tick;
     }
 
+    /// <summary>Procura, subindo a árvore, o primeiro ancestral do tipo <typeparamref name="T"/> (inclusive o próprio elemento).</summary>
     private static T? FindParent<T>(DependencyObject o) where T : DependencyObject
     {
         for (var p = o; p != null; p = ParentOf(p))

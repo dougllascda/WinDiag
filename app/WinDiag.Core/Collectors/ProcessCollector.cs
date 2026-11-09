@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -20,6 +20,7 @@ public sealed class ProcessCollector : ICollector
 
     /// <summary>Nomes de processos de aplicativos que costumam ficar em segundo plano (navegadores, launchers, mensageiros).</summary>
     public static readonly Regex BgAppRegex = new(@"^(msedge|msedgewebview2|chrome|firefox|opera|brave|Discord|steamwebhelper|OneDrive|Teams|ms-teams|Spotify|CurseForge|Overwolf|EpicGamesLauncher|EpicWebHelper|Battle\.net|EADesktop|Code|Antigravity|language_server.*|Gemini|claude|WhatsApp|Telegram)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    /// <summary>Programas de inicialização considerados pesados além dos de <see cref="BgAppRegex"/> (Steam, Epic, etc.). O casamento é por trecho do nome do item.</summary>
     static readonly Regex HeavyStartExtra = new("Discord|Spotify|Steam|CurseForge|Epic|OneDrive|Teams|Overwolf", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <inheritdoc/>
@@ -63,6 +64,7 @@ public sealed class ProcessCollector : ICollector
         return SelfAndChildren(Environment.ProcessId, list);
     }
 
+    /// <summary>Rankings de CPU (amostra de 1 s entre duas leituras do TotalProcessorTime; 100% = uma thread inteira) e de RAM (working set). Processos protegidos sem leitura são ignorados. O WinDiag e seus filhos ficam fora.</summary>
     static void Top(SectionResult res)
     {
         var skip = ExcludedPids();
@@ -94,6 +96,7 @@ public sealed class ProcessCollector : ICollector
         var top = rows.OrderByDescending(r => r.Pct).Take(5).ToList();
         foreach (var r in top) t.AddRow(r.Name, r.Id, Fmt.Num(r.Pct, 0) + "%");
         var av = top.FirstOrDefault(r => r.Pct >= 25 && SecurityCollector.AvProcRegex.IsMatch(r.Name));
+        // Antivírus só é citado se estiver >= 25% de um núcleo; a varredura do próprio WinDiag pode causar isso, por isso o texto não afirma consumo constante.
         if (av.Name != null)
             res.Find(Severity.Info, Loc.T("Antivírus usando CPU na coleta", "Antivirus using CPU during collection"), Loc.T($"{Regex.Replace(av.Name, @"#\d+$", "")} com {Fmt.Num(av.Pct, 0)}% de CPU", $"{Regex.Replace(av.Name, @"#\d+$", "")} at {Fmt.Num(av.Pct, 0)}% CPU"),
                 Loc.T("O antivírus estava entre os processos mais pesados no momento da coleta. É comum ele varrer o próprio utilitário enquanto ele roda, então isso não prova consumo constante. Se aparecer também na captura durante o jogo, aí sim pesa.", "The antivirus was among the heaviest processes at the time of collection. It is common for it to scan this utility while it runs, so this does not prove constant consumption. If it also shows up in the capture during gameplay, then it matters."),
@@ -107,6 +110,7 @@ public sealed class ProcessCollector : ICollector
         foreach (var r in ram.OrderByDescending(r => r.MB).Take(8)) t2.AddRow(r.Name, r.Id, Fmt.Num(r.MB, 0) + " MB");
     }
 
+    /// <summary>Uso instantâneo de memória de vídeo dedicada e compartilhada (classe WMI GPUAdapterMemory, soma dos adaptadores, em bytes convertidos para MB).</summary>
     static void Gpu(SectionResult res)
     {
         var gm = Wmi.Query("SELECT DedicatedUsage, SharedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory", onError: m => res.Note(Loc.T("Contadores de memória da GPU: ", "GPU memory counters: ") + m));
@@ -116,6 +120,7 @@ public sealed class ProcessCollector : ICollector
         res.Group(Loc.T("Memória de vídeo", "Video memory")).Add(Loc.T("Memória de vídeo agora", "Video memory now"), Loc.T($"dedicada {Fmt.Num(ded / 1048576d, 0)} MB | compartilhada (RAM) {Fmt.Num(shr / 1048576d, 0)} MB", $"dedicated {Fmt.Num(ded / 1048576d, 0)} MB | shared (RAM) {Fmt.Num(shr / 1048576d, 0)} MB"));
     }
 
+    /// <summary>Lista os itens de inicialização (<see cref="Startup.Read"/>), guarda em <c>SystemFacts.StartupItems</c> e avisa quando há apps pesados habilitados.</summary>
     static void StartupPart(SectionResult res, SystemFacts f)
     {
         var items = Startup.Read();
@@ -138,6 +143,7 @@ public sealed class ProcessCollector : ICollector
         }
     }
 
+    /// <summary>Adaptadores de rede ativos (Win32_NetworkAdapter, velocidade em bps convertida para Mbps) e dispositivos de áudio (Win32_SoundDevice). Sinaliza adaptadores de VPN/redes virtuais, que podem somar latência.</summary>
     static void NetAudio(SectionResult res)
     {
         var g = res.Group(Loc.T("Rede e áudio ativos", "Active network and audio"));
@@ -168,6 +174,7 @@ public sealed class ProcessCollector : ICollector
                 Loc.T("Se você não usa a VPN ou a rede virtual, desative o adaptador ou feche o aplicativo.", "If you do not use the VPN or virtual network, disable the adapter or close the application."), id: "processos.vpn_adapter");
     }
 
+    /// <summary>Soma o working set dos aplicativos de segundo plano conhecidos (<see cref="BgAppRegex"/>). O working set conta memória compartilhada em duplicidade entre processos do mesmo app, então o total é um teto.</summary>
     static void Background(SectionResult res)
     {
         var heavy = new List<(string Name, double MB)>();

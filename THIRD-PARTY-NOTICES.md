@@ -1,6 +1,6 @@
 # Third-party notices
 
-WinDiag is distributed under the MIT License (see [LICENSE](LICENSE)). It uses the third-party components below, each under its own license. The full license texts are available at the links given.
+WinDiag is proprietary, source-available software (see [LICENSE](LICENSE)). It uses the third-party components below, each under its own license. The full license texts are available at the links given.
 
 ## Distributed with WinDiag
 
@@ -24,7 +24,7 @@ WinDiag is distributed under the MIT License (see [LICENSE](LICENSE)). It uses t
 - License: Mozilla Public License 2.0 (MPL-2.0).
 - Project and source code: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor (version 0.9.6, commit 3d331e3370efb858411f19511373eff65a218701)
 - License text: https://www.mozilla.org/en-US/MPL/2.0/
-- The library is used **unmodified**, as a binary dependency. The source code of the version used is available in the repository above. WinDiag's own files remain under the MIT License.
+- The library is used **unmodified**, as a binary dependency. The source code of the version used is available in the repository above. WinDiag's own files remain under the WinDiag License; the MPL-2.0 applies only to the library itself.
 - This version reads CPU, motherboard and memory sensors through the PawnIO driver (not WinRing0). WinDiag does **not include, download or install** that driver; it is used only if the user installed it from the official website.
 
 Dependencies of LibreHardwareMonitorLib 0.9.6 for .NET 8 (as listed in the package .nuspec):

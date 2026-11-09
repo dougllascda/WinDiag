@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -55,8 +55,10 @@ public sealed class MemoryCollector : ICollector
         : sticks >= 2 && allRecognized && distinctChannels == 1 ? false
         : null;
 
+    /// <summary>Executa Get-MMAgent via powershell.exe (sem perfil, não interativo, timeout de 20 s) e interpreta as três opções. Só é chamado como administrador, pois o cmdlet exige elevação. Em falha registra nota e devolve tudo null.</summary>
     private static (bool? Compression, bool? PageCombining, bool? PreLaunch) ReadMmAgent(SectionResult res)
     {
+        // Saída de uma linha "a|b|c" com valores True/False, sem depender da cultura nem do idioma do Windows.
         const string cmd = "$a = Get-MMAgent; \"$($a.MemoryCompression)|$($a.PageCombining)|$($a.ApplicationPreLaunch)\"";
         var r = Proc.Run(Proc.Sys32(@"WindowsPowerShell\v1.0\powershell.exe"), "-NoProfile -NonInteractive -Command \"" + cmd.Replace("\"", "\\\"") + "\"", 20000);
         if (!r.Ok) { res.Note("Get-MMAgent: " + (r.TimedOut ? Loc.T("tempo esgotado", "timed out") : Loc.T("sem resposta (" + r.StdErr.Trim() + ")", "no response (" + r.StdErr.Trim() + ")"))); return (null, null, null); }

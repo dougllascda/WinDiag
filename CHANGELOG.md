@@ -4,6 +4,16 @@ All notable changes to WinDiag are documented in this file. The format is based 
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
+### Changed
+- **License:** WinDiag is now source-available under the WinDiag License (all rights reserved). The official releases can be downloaded and used for free; copying, modifying, redistributing or selling the code or binaries requires written permission. Pull requests are accepted only under the Contributor License Agreement.
+- **Repository reorganized:** `CONTRIBUTING.md` and `SECURITY.md` moved to `.github/`; Portuguese documents moved to `docs/pt-BR/`; `publish.ps1` moved to `tools/publish.ps1`; the Code of Conduct was removed.
+
+### Added
+- **Usage profile Gaming | Work:** the Work profile covers printers, factory-installed programs (recommendation and removal through the official uninstaller), laptop battery and power, Windows Update and boot time, and hides the game tabs.
+- **Fully documented code:** every type and member of the app and the core library has XML documentation (enforced by an automated test), plus module guides in `docs/modules/` and an API reference site built with DocFX.
+
 ## [1.1.1] - 2026-11-08
 
 First public release. Earlier versions were internal and are not published; the features below summarize what the app does today.

@@ -8,6 +8,7 @@ namespace WinDiag.App;
 /// </summary>
 internal static class Prefs
 {
+    /// <summary>Trava que serializa leitura-alteração-gravação, evitando que duas threads percam alterações uma da outra.</summary>
     private static readonly object Gate = new();
 
     /// <summary>Lê as preferências atuais; em falha devolve os padrões.</summary>
@@ -43,7 +44,7 @@ internal static class Prefs
                     p.Save();
                 }
             }
-            catch { /* sem permissão de escrita: a escolha vale só nesta sessão */ }
+            catch { blocked = true; /* sem permissão de escrita: a escolha vale só nesta sessão */ }
         }
         if (blocked)
         {

@@ -166,6 +166,42 @@ public sealed class SystemFacts
     // --- Processos / inicialização ---
     /// <summary>Itens de inicialização lidos.</summary>
     public List<StartupItem> StartupItems { get; set; } = new();
+
+    // --- Perfil e Trabalho (ScanEngine e WorkCollector) ---
+    /// <summary>Perfil de uso ativo (copiado pelo ScanEngine no início da varredura; Jogos por padrão).</summary>
+    public UsageProfile Profile { get; set; } = UsageProfile.Gaming;
+    /// <summary>Impressoras instaladas. Vazio se não há ou não foram lidas.</summary>
+    public List<PrinterInfo> Printers { get; set; } = new();
+    /// <summary>true/false = serviço Spooler em execução/parado; null se não lido.</summary>
+    public bool? SpoolerRunning { get; set; }
+    /// <summary>true = serviço Spooler com início Desativado (escolha deliberada); false = não desativado; null se não lido.</summary>
+    public bool? SpoolerDisabled { get; set; }
+    /// <summary>GUIDs (minúsculos) dos planos de energia listados por <c>powercfg /list</c>. Vazio se não lido; nesse caso nenhuma troca de plano é sugerida.</summary>
+    public List<string> PowerPlanGuids { get; set; } = new();
+    /// <summary>Programas de fábrica classificados (só os que o BloatwareDb reconhece).</summary>
+    public List<BloatItem> Bloat { get; set; } = new();
+    /// <summary>true se há bateria (Win32_Battery).</summary>
+    public bool HasBattery { get; set; }
+    /// <summary>Capacidade de projeto da bateria, em mWh (relatório do powercfg). Null se não lida.</summary>
+    public int? BatteryDesignMWh { get; set; }
+    /// <summary>Capacidade da carga completa atual, em mWh. Null se não lida.</summary>
+    public int? BatteryFullMWh { get; set; }
+    /// <summary>Desgaste da bateria em % (1 - carga completa / projeto). Null se não calculável.</summary>
+    public double? BatteryWearPct { get; set; }
+    /// <summary>true = na tomada; false = na bateria; null = não determinado ou sem bateria.</summary>
+    public bool? OnAcPower { get; set; }
+    /// <summary>GUID do plano de energia ativo (minúsculo). Null se não lido.</summary>
+    public string? ActivePowerPlanGuid { get; set; }
+    /// <summary>Nome do plano de energia ativo. Null se não lido.</summary>
+    public string? ActivePowerPlanName { get; set; }
+    /// <summary>Data da última atualização instalada (Win32_QuickFixEngineering.InstalledOn mais recente). Null se não lida.</summary>
+    public DateTime? LastUpdateInstalled { get; set; }
+    /// <summary>true se a data da última atualização veio só do Win32_QuickFixEngineering e não foi possível confirmá-la pelo log do Windows Update (evento 19); o achado "update_old" fica então em Info.</summary>
+    public bool LastUpdateUnconfirmed { get; set; }
+    /// <summary>true se o Windows pede reinício (Windows Update ou Component Based Servicing); null se não lido.</summary>
+    public bool? RebootPending { get; set; }
+    /// <summary>Tempo do último boot em ms (evento 100 do Diagnostics-Performance). Null se ilegível.</summary>
+    public int? BootTimeMs { get; set; }
 }
 
 /// <summary>Monitor ativo (DisplayCollector). Usado também pelo "Igualar taxa dos monitores".</summary>

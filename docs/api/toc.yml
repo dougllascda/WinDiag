@@ -1,0 +1,24 @@
+- name: Overview
+  href: ../ARCHITECTURE.md
+- name: Modules
+  items:
+    - name: Scan engine
+      href: ../modules/scan-engine.md
+    - name: Collectors
+      href: ../modules/collectors.md
+    - name: Analysis and rules
+      href: ../modules/analysis-and-rules.md
+    - name: Optimizations
+      href: ../modules/optimizations.md
+    - name: Sensors
+      href: ../modules/sensors.md
+    - name: Work profile
+      href: ../modules/work-profile.md
+    - name: History and report
+      href: ../modules/history-and-report.md
+    - name: User interface
+      href: ../modules/ui.md
+    - name: Localization
+      href: ../modules/localization.md
+- name: API Reference
+  href: api/

@@ -5,6 +5,7 @@ namespace WinDiag.Core.Util;
 /// <summary>Descoberta das bibliotecas Steam (registro + libraryfolders.vdf). Não exige administrador; sem Steam devolve lista vazia.</summary>
 public static class Steam
 {
+    /// <summary>Linha "path" do libraryfolders.vdf (formato KeyValues da Valve), com o caminho entre aspas.</summary>
     private static readonly Regex PathLine = new("^\\s*\"path\"\\s+\"([^\"]+)\"", RegexOptions.Compiled);
 
     /// <summary>Extrai os caminhos "path" de um libraryfolders.vdf (barras duplas viram simples).</summary>
@@ -53,6 +54,7 @@ public static class Steam
         string cur = char.ToUpperInvariant(m.Groups[1].Value[0]) + @":\";
         foreach (var seg in m.Groups[2].Value.Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
+            // Se o segmento não for encontrado (permissão ou removido), mantém a grafia original.
             string name = seg;
             try
             {

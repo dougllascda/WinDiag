@@ -10,6 +10,7 @@ namespace WinDiag.App.Views;
 /// <summary>Janela "Como fazer na BIOS": fabricante detectado, tecla de entrada, passos, como voltar atrás e aviso.</summary>
 public sealed class BiosGuideWindow : Window
 {
+    /// <summary>Texto simples do guia, no mesmo formato exibido, usado pelo botão "Copiar passos".</summary>
     private readonly string _plain;
 
     /// <summary>Abre o guia do tópico informado (texto do GuideTopic do achado/passo), usando a placa detectada.</summary>
@@ -29,6 +30,7 @@ public sealed class BiosGuideWindow : Window
         w.ShowDialog();
     }
 
+    /// <summary>Monta a janela a partir do guia já resolvido; tudo é feito em código, sem XAML.</summary>
     private BiosGuideWindow(BiosGuide guide, string? board)
     {
         Title = Loc.T("Como fazer na BIOS", "How to do it in the BIOS");
@@ -106,6 +108,7 @@ public sealed class BiosGuideWindow : Window
         Content = layout;
     }
 
+    /// <summary>Cabeçalho de seção em destaque (cor de acento).</summary>
     private static TextBlock Section(string text)
     {
         var t = UiExtra.Text(text, "AccentBrush", 14, FontWeights.SemiBold);

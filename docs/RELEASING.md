@@ -4,14 +4,14 @@ A checklist for the maintainer. The `.github/workflows/release.yml` workflow doe
 
 ## Before the tag
 
-1. Update the version in `app\Directory.Build.props` (`Version`, `AssemblyVersion`, `FileVersion`, `InformationalVersion`). It is the single source: `publish.ps1` and the installer read it from there.
+1. Update the version in `app\Directory.Build.props` (`Version`, `AssemblyVersion`, `FileVersion`, `InformationalVersion`). It is the single source: `tools\publish.ps1` and the installer read it from there.
 2. Update `CHANGELOG.md`: add a section `## [X.Y.Z] - yyyy-MM-dd` (moving the entries from `## [Unreleased]`). The workflow uses exactly that section (up to the next `## `) as the Release body.
 3. Check that the README mentions nothing tied to a fixed version (the badges are dynamic and the download links point to `releases/latest`).
 4. Check locally:
    ```powershell
    dotnet build app\WinDiag.sln -c Release
    dotnet test app\WinDiag.sln -c Release
-   pwsh -File publish.ps1 -Scan
+   pwsh -File tools\publish.ps1 -Scan
    ```
    With Inno Setup 6 installed, `dist\` will also contain `WinDiag-Setup-X.Y.Z.exe`. Without it, the script warns and skips the installer.
 5. Commit to `main` and wait for CI to turn green.

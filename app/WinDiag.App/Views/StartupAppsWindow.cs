@@ -10,12 +10,19 @@ namespace WinDiag.App.Views;
 /// <summary>Liga/desliga apps da inicialização do Windows (StartupApproved), com snapshot por alteração.</summary>
 public sealed class StartupAppsWindow : Window
 {
+    /// <summary>Leitura usada para listar os itens; os itens são alterados em memória após o sucesso para a lista refletir o estado real.</summary>
     private readonly SystemFacts _facts;
+    /// <summary>Refaz a varredura da janela principal ao fechar (se algo mudou).</summary>
     private readonly Func<Task> _rescan;
+    /// <summary>Sem administrador os interruptores ficam desabilitados (gravar em HKLM exige elevação).</summary>
     private readonly bool _isAdmin;
+    /// <summary>Mensagens do último resultado do FixEngine.</summary>
     private readonly StackPanel _log = new();
+    /// <summary>Interruptores e se cada um é editável; guardados para desabilitar todos durante uma operação.</summary>
     private readonly List<(ToggleButton Toggle, bool Editable)> _toggles = new();
+    /// <summary>true se alguma alteração foi aplicada com sucesso (dispara a nova varredura ao fechar).</summary>
     private bool _changed;
+    /// <summary>true durante uma alteração; bloqueia cliques e o fechamento da janela.</summary>
     private bool _busy;
 
     /// <summary>Cria a janela; <paramref name="rescan"/> refaz a varredura ao fechar, se algo foi alterado.</summary>
@@ -53,18 +60,22 @@ public sealed class StartupAppsWindow : Window
         Content = root;
 
         // Não fecha no meio de uma alteração (o snapshot e a mudança precisam terminar juntos).
+        // Não fecha no meio de uma alteração (o snapshot e a mudança precisam terminar juntos).
         Closing += (_, e) => { if (_busy) e.Cancel = true; };
         Closed += async (_, _) => { if (_changed) { try { await _rescan(); } catch { } } };
     }
 
+    /// <summary>Habilita/desabilita todos os interruptores durante uma operação (uma por vez).</summary>
     private void SetBusy(bool busy)
     {
         _busy = busy;
         foreach (var (t, editable) in _toggles) t.IsEnabled = !busy && editable && _isAdmin;
     }
 
+    /// <summary>Encurta comandos longos para a linha; o texto completo vai no ToolTip.</summary>
     private static string Shorten(string s) => s.Length <= 90 ? s : s[..87] + "...";
 
+    /// <summary>Monta a linha de um item; o interruptor chama o FixEngine (snapshot + desfazer) em thread de fundo.</summary>
     private Border BuildRow(StartupItem it)
     {
         var g = new Grid();
@@ -100,6 +111,7 @@ public sealed class StartupAppsWindow : Window
             var want = tg.IsChecked == true;
             SetBusy(true); // uma operação por vez: evita snapshots concorrentes
             OpResult res;
+            // Fora da UI thread: o FixEngine grava snapshot e registro, o que pode demorar e não deve travar a janela.
             try { res = await Task.Run(() => new FixEngine().SetStartupApp(it, want)); }
             catch (Exception ex) { res = new OpResult { Ok = false, Error = ex.Message }; }
             if (res.Ok)

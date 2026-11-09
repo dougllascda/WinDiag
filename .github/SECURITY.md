@@ -1,6 +1,6 @@
 # Security
 
-**English** | [Português (Brasil)](SECURITY.pt-BR.md)
+**English** | [Português (Brasil)](../docs/pt-BR/SECURITY.pt-BR.md)
 
 ## Principles
 
@@ -28,7 +28,14 @@ Confirm that the file was built by this repository's release workflow:
 gh attestation verify .\WinDiag-Setup-<version>.exe --repo dougllascda/WinDiag
 ```
 
-See [docs/SIGNING.md](docs/SIGNING.md) for code-signing status and details.
+See [docs/SIGNING.md](../docs/SIGNING.md) for code-signing status and details.
+
+## About hashes and attestations
+
+- **SHA256 is not encryption and does not hide the code.** It is a fingerprint of the file, used to detect tampering or corruption in the download.
+- Anyone who builds a modified version gets a different hash, which will not match the `SHA256SUMS.txt` of the official release.
+- The **build attestation** shows that the file came out of this repository's workflow. It cannot be forged without access to the account that owns the repository.
+- A **digital signature** adds the identity of the author on top of that (see [docs/SIGNING.md](../docs/SIGNING.md)).
 
 ## Antivirus false positives
 

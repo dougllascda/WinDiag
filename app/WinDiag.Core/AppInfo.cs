@@ -20,6 +20,8 @@ public static class AppInfo
     /// <summary>Nome e versão juntos (ex.: "WinDiag 1.0.0").</summary>
     public static string Title => $"{Name} {Version}";
 
+    /// <summary>Lê a versão do assembly. Prefere a versão informacional (que o MSBuild preenche com o valor de <c>Directory.Build.props</c>) e cai para a versão numérica do assembly.</summary>
+    /// <returns>Versão sem metadados de build; "0.0.0" se nada estiver disponível.</returns>
     private static string ReadVersion()
     {
         var asm = typeof(AppInfo).Assembly;

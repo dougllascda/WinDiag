@@ -94,15 +94,20 @@ public sealed class SectionResult
     /// <param name="id">Id estável (padrão "seção.assunto"); vazio gera Seção + "." + slug do título.</param>
     /// <param name="simple">Explicação simples para leigos.</param>
     /// <param name="guide">Nome de um BiosTopic, ou "".</param>
+    /// <param name="scope">Perfil do achado; <see cref="Scope.Both"/> usa o mapa de Ids de <see cref="Rules.ScopeMap"/> (achados só de jogos).</param>
     public void Find(Severity sev, string title, string evidence, string explain = "", string action = "", string fixId = "", int impact = 0,
-        string id = "", string simple = "", string guide = "")
-        => Findings.Add(new Finding(sev, title, evidence, explain, action, fixId, impact)
+        string id = "", string simple = "", string guide = "", Scope scope = Scope.Both)
+    {
+        var finalId = string.IsNullOrWhiteSpace(id) ? DefaultId(Key, title) : id;
+        Findings.Add(new Finding(sev, title, evidence, explain, action, fixId, impact)
         {
             Section = Key,
-            Id = string.IsNullOrWhiteSpace(id) ? DefaultId(Key, title) : id,
+            Id = finalId,
             Simple = simple,
             GuideTopic = guide,
+            Scope = scope != Scope.Both ? scope : Rules.ScopeMap.For(finalId),
         });
+    }
 
     /// <summary>Id padrão: seção + "." + título em ASCII minúsculo com "_" entre palavras.</summary>
     /// <param name="section">Chave da seção.</param>

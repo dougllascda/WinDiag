@@ -13,20 +13,30 @@ namespace WinDiag.Core.Live;
 /// </summary>
 public sealed class CpuLive : IDisposable
 {
+    /// <summary>Categoria de contadores "Processor Information": ao contrário de "Processor", cobre grupos com mais de 64 threads e traz "% Processor Performance" (clock efetivo relativo à base).</summary>
     private const string Cat = "Processor Information";
+    /// <summary>Contadores: carga total, desempenho do processador (% da frequência base), tempo em DPC e páginas lidas do disco por segundo (hard faults).</summary>
     private PerformanceCounter? _load, _perf, _dpc, _pagesIn;
+    /// <summary>Contadores de desempenho por thread lógica do grupo 0 (instâncias "0,N"), para o clock por thread.</summary>
     private List<PerformanceCounter> _threads = new();
+    /// <summary>_initialized: a criação dos contadores já foi tentada; _useWmi: usa WMI porque os contadores não puderam ser criados.</summary>
     private bool _initialized, _useWmi;
+    /// <summary>Clock base (nominal) em MHz, usado para converter "% Processor Performance" em MHz. 0 = desconhecido.</summary>
     private double _baseMHz;
+    /// <summary>Environment.TickCount64 do instante da escorva dos contadores; 0 se ainda não houve.</summary>
     private long _primedAt;
 
+    /// <summary>Espelho da estrutura MEMORYSTATUSEX da Win32 (campos em bytes, exceto dwMemoryLoad em %).</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryStatusEx
     {
+        /// <summary>Tamanho da estrutura (preenchido antes da chamada) e percentual de memória em uso informado pelo Windows.</summary>
         public uint dwLength, dwMemoryLoad;
+        /// <summary>RAM física total e disponível, arquivo de paginação, memória virtual e virtual estendida (total/disponível), em bytes.</summary>
         public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
     }
 
+    /// <summary>kernel32!GlobalMemoryStatusEx: estado da memória do sistema. Não exige administrador; devolve false em falha.</summary>
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx lpBuffer);
@@ -47,6 +57,7 @@ public sealed class CpuLive : IDisposable
         catch (Exception) { /* taxas ficam null nesta amostra */ }
     }
 
+    /// <summary>Preenche RAM disponível (GB, base 1024) e percentual usado a partir de GlobalMemoryStatusEx.</summary>
     private static void ReadMemory(LiveSample s)
     {
         var m = new MemoryStatusEx { dwLength = (uint)Marshal.SizeOf<MemoryStatusEx>() };
@@ -55,6 +66,7 @@ public sealed class CpuLive : IDisposable
         s.RamUsedPct = Math.Round((1d - (double)m.ullAvailPhys / m.ullTotalPhys) * 100d, 1);
     }
 
+    /// <summary>Resolve o clock base (WMI Win32_Processor.MaxClockSpeed, ou ~MHz do registro) e cria os contadores. Se falhar (nomes localizados, serviço desligado), ativa o modo WMI.</summary>
     private void Init()
     {
         _initialized = true;
@@ -88,6 +100,7 @@ public sealed class CpuLive : IDisposable
         }
     }
 
+    /// <summary>Lê os contadores de taxa. Clock efetivo = base x "% Processor Performance" / 100 (pode passar de 100% no turbo).</summary>
     private void ReadRates(LiveSample s)
     {
         if (_useWmi) { ReadWmi(s); return; }
@@ -101,6 +114,7 @@ public sealed class CpuLive : IDisposable
             s.CpuThreadMHz = _threads.Select(t => Math.Round(_baseMHz * t.NextValue() / 100d)).ToArray();
     }
 
+    /// <summary>Alternativa por WMI (classes Win32_PerfFormattedData_*, nomes fixos independentes do idioma) quando os contadores não existem.</summary>
     private void ReadWmi(LiveSample s)
     {
         // Os objetos WMI são liberados em cada leitura: o LiveSampler roda a cada 1 s e não pode vazar handles.
@@ -127,8 +141,10 @@ public sealed class CpuLive : IDisposable
         s.HardFaultsPerSec = mem?.D("PagesInputPersec");
     }
 
+    /// <summary>Arredonda para uma casa decimal.</summary>
     private static double Round(float v) => Math.Round(v, 1);
 
+    /// <summary>Libera os contadores e limpa as referências, para que um novo Init possa recriá-los.</summary>
     private void DisposeCounters()
     {
         _load?.Dispose(); _perf?.Dispose(); _dpc?.Dispose(); _pagesIn?.Dispose();

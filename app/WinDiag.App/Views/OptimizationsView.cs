@@ -12,20 +12,34 @@ namespace WinDiag.App.Views;
 /// <summary>Aba "Otimizações": interruptor por item, com desfazer individual pelo valor salvo no snapshot.</summary>
 public sealed class OptimizationsView : UserControl
 {
+    /// <summary>Cultura do idioma atual para formatar números (ponto/vírgula).</summary>
     private static CultureInfo PtBr => WinDiag.Core.Loc.Culture;
+    /// <summary>Dica do interruptor travado: valor já aplicado fora do WinDiag, sem valor anterior para voltar.</summary>
     private static string LockedTip => Loc.T("Configurado fora do WinDiag (ex.: AtlasOS) ou padrão do Windows; sem valor anterior salvo para voltar.", "Configured outside WinDiag (e.g. AtlasOS) or the Windows default; no previous value saved to go back to.");
 
+    /// <summary>Leitor da última varredura completa (nulo enquanto ela roda).</summary>
     private readonly Func<SystemFacts?> _getFacts;
+    /// <summary>Refaz a varredura da janela principal.</summary>
     private readonly Func<Task> _rescan;
+    /// <summary>Conteúdo rolável da aba, reconstruído a cada atualização.</summary>
     private readonly StackPanel _content = new();
+    /// <summary>Mensagens do último resultado.</summary>
     private readonly StackPanel _logPanel = new();
+    /// <summary>Cartão "Resultado", exibido depois da primeira operação.</summary>
     private readonly Border _logCard;
+    /// <summary>Camada translúcida exibida enquanto uma operação roda.</summary>
     private readonly Border _busy;
+    /// <summary>Texto da camada ("Aplicando...", "Desfazendo..." etc.).</summary>
     private readonly TextBlock _busyText;
+    /// <summary>Mostra também os itens que não se aplicam a este PC ou a outro perfil.</summary>
     private bool _showInapplicable;
+    /// <summary>true durante uma operação; bloqueia cliques duplicados.</summary>
     private bool _working;
+    /// <summary>Número da atualização mais recente; respostas atrasadas de atualizações antigas são descartadas.</summary>
     private int _refreshVersion;
+    /// <summary>Avisa a janela principal que há operação em curso.</summary>
     private readonly Action _beginBusy;
+    /// <summary>Encerra o aviso de operação em curso.</summary>
     private readonly Action _endBusy;
 
     /// <summary>
@@ -80,6 +94,7 @@ public sealed class OptimizationsView : UserControl
             return;
         }
 
+        // Fora da UI thread: calcular o estado lê registro e arquivos de snapshot, o que pode demorar.
         List<FixStatus> statuses;
         string? error = null;
         try { statuses = await Task.Run(() => new FixEngine().GetStatuses(facts)); }
@@ -98,18 +113,21 @@ public sealed class OptimizationsView : UserControl
 
         _content.Children.Add(BuildHeader(facts, statuses));
 
+        var profile = facts.Profile;
         var items = statuses.Where(s => !s.Fix.Temp && !s.Fix.StartupApps).ToList();
-        var visible = items.Where(s => s.Kind != FixStatusKind.NaoAplicavel)
+        var visible = items.Where(s => s.Kind != FixStatusKind.NaoAplicavel && ProfileUi.Matches(s.Fix.Scope, profile))
             .OrderBy(s => s.Kind switch { FixStatusKind.AtivoWinDiag => 0, FixStatusKind.Disponivel => 1, _ => 2 })
             .ToList();
         foreach (var s in visible) _content.Children.Add(BuildCard(s, facts, false));
 
-        var hidden = items.Where(s => s.Kind == FixStatusKind.NaoAplicavel).ToList();
+        if (profile == UsageProfile.Work) _content.Children.Add(new BloatCardView(_getFacts, _rescan, _beginBusy, _endBusy));
+
+        var hidden = items.Where(s => s.Kind == FixStatusKind.NaoAplicavel || !ProfileUi.Matches(s.Fix.Scope, profile)).ToList();
         if (hidden.Count > 0)
         {
             var cb = new CheckBox
             {
-                Content = Loc.T("Mostrar itens que não se aplicam a este PC", "Show items that do not apply to this PC"),
+                Content = Loc.T("Mostrar itens que não se aplicam a este PC ou a outro perfil", "Show items that do not apply to this PC or belong to another profile"),
                 IsChecked = _showInapplicable,
                 Foreground = Ui.Res("MutedBrush"),
                 Margin = new Thickness(2, 4, 0, 10),
@@ -127,6 +145,7 @@ public sealed class OptimizationsView : UserControl
         _content.Children.Add(_logCard);
     }
 
+    /// <summary>Faixa de aviso com borda colorida (ex.: falta de administrador).</summary>
     private static Border Banner(string text, string brushKey)
     {
         var b = Ui.Res(brushKey);
@@ -141,6 +160,7 @@ public sealed class OptimizationsView : UserControl
         };
     }
 
+    /// <summary>Cartão de cabeçalho: texto explicativo, "Limpar temporários" e histórico de snapshots (janela modal, bloqueando a navegação).</summary>
     private Border BuildHeader(SystemFacts facts, List<FixStatus> statuses)
     {
         var sp = new StackPanel();
@@ -174,6 +194,7 @@ public sealed class OptimizationsView : UserControl
         return Ui.Card(sp);
     }
 
+    /// <summary>Cartão de uma otimização: nome, risco, explicação, estado e interruptor (ou botão, se for ação pontual sem desfazer).</summary>
     private Border BuildCard(FixStatus st, SystemFacts facts, bool inapplicable)
     {
         var fix = st.Fix;
@@ -187,6 +208,12 @@ public sealed class OptimizationsView : UserControl
         title.Children.Add(RiskBadge(fix));
         if (fix.Reboot)
             title.Children.Add(new TextBlock { Text = Loc.T("Exige reinício", "Requires restart"), Foreground = Ui.Res("WarnBrush"), FontSize = 11.5, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        if (ProfileUi.ScopeLabel(fix.Scope) is { } scopeLabel && !ProfileUi.Matches(fix.Scope, facts.Profile))
+        {
+            var pill = UiExtra.Pill(scopeLabel, "InfoBrush");
+            pill.Margin = new Thickness(10, 0, 0, 0);
+            title.Children.Add(pill);
+        }
         left.Children.Add(title);
         left.Children.Add(Ui.Muted(fix.Name, 12));
         left.Children.Add(new TextBlock { Text = fix.Explain, TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Margin = new Thickness(0, 6, 0, 0) });
@@ -199,6 +226,33 @@ public sealed class OptimizationsView : UserControl
         };
         left.Children.Add(new TextBlock { Text = st.StatusText, Foreground = brush, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
         g.Children.Add(left);
+
+        if (fix.IsAction)
+        {
+            if (st.Kind == FixStatusKind.NaoAplicavel)
+            {
+                // Ação que não se aplica (ex.: spooler desativado de propósito): só o estado, sem botão.
+                var plain = Ui.Card(g);
+                if (inapplicable) plain.Opacity = 0.5;
+                return plain;
+            }
+            var run = new Button
+            {
+                Content = fix.ShortName,
+                Padding = new Thickness(14, 6, 14, 6),
+                IsEnabled = facts.IsAdmin && !inapplicable && st.Kind != FixStatusKind.NaoAplicavel && !_working,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(14, 0, 0, 0),
+            };
+            if (!facts.IsAdmin) run.ToolTip = Loc.T("Alterações exigem executar como administrador.", "Changes require running as administrator.");
+            System.Windows.Automation.AutomationProperties.SetName(run, fix.ShortName);
+            run.Click += async (_, _) => await RunActionAsync(fix);
+            Grid.SetColumn(run, 1);
+            g.Children.Add(run);
+            var actionCard = Ui.Card(g);
+            if (inapplicable) actionCard.Opacity = 0.5;
+            return actionCard;
+        }
 
         var tg = new ToggleButton
         {
@@ -213,6 +267,7 @@ public sealed class OptimizationsView : UserControl
         System.Windows.Automation.AutomationProperties.SetName(tg, fix.ShortName);
         tg.Click += async (_, _) =>
         {
+            // O interruptor só muda depois da confirmação e da releitura: volta ao estado real e a lista é refeita.
             tg.IsChecked = st.IsOn; // desfaz a mudança visual até confirmar
             await ToggleAsync(st);
         };
@@ -224,6 +279,7 @@ public sealed class OptimizationsView : UserControl
         return card;
     }
 
+    /// <summary>Selo de risco (baixo/médio/alto) com a cor da severidade.</summary>
     private static Border RiskBadge(FixDefinition fix)
     {
         var key = fix.Risk switch { FixRisk.Alto => "BadBrush", FixRisk.Medio => "WarnBrush", _ => "OkBrush" };
@@ -244,6 +300,7 @@ public sealed class OptimizationsView : UserControl
         };
     }
 
+    /// <summary>Cartão que abre a janela de apps na inicialização.</summary>
     private Border BuildStartupCard(SystemFacts facts)
     {
         var on = facts.StartupItems.Count(i => i.Enabled);
@@ -272,6 +329,7 @@ public sealed class OptimizationsView : UserControl
 
     // ------------------------------------------------------------------ ações
 
+    /// <summary>Liga (com confirmação e snapshot) ou desfaz (volta ao valor salvo) um item; risco alto exige digitar CONFIRMO.</summary>
     private async Task ToggleAsync(FixStatus st)
     {
         if (_working) return;
@@ -299,6 +357,20 @@ public sealed class OptimizationsView : UserControl
         }
     }
 
+    /// <summary>Executa uma ação pontual (ex.: reiniciar o spooler) depois de confirmação; não há desfazer.</summary>
+    private async Task RunActionAsync(FixDefinition fix)
+    {
+        if (_working) return;
+        var body = Loc.T("Risco: ", "Risk: ") + $"{fix.RiskLabel}\n\n{fix.Explain}"
+            + Loc.T("\n\nEsta ação não pode ser desfeita.", "\n\nThis action cannot be undone.");
+        if (!ConfirmDialog.Ask(Window.GetWindow(this), Loc.T("Executar ação", "Run action"), fix.Name + "?", body,
+                requiredText: fix.Risk == FixRisk.Alto ? Loc.T("CONFIRMO", "CONFIRM") : null, warn: true,
+                okText: Loc.T("Executar", "Run"), cancelText: Loc.T("Cancelar", "Cancel")))
+            return;
+        await RunAsync(() => new FixEngine().RunAction(fix), Loc.T("Executando...", "Running..."));
+    }
+
+    /// <summary>Confirma e limpa os temporários (não reversível; o aviso diz isso).</summary>
     private async Task CleanTempAsync()
     {
         if (_working) return;
@@ -310,6 +382,7 @@ public sealed class OptimizationsView : UserControl
         await RunAsync(() => new FixEngine().CleanTemp(), Loc.T("Limpando...", "Clearing..."));
     }
 
+    /// <summary>Executa a operação em thread de fundo com a camada de ocupado, mostra o resultado e refaz varredura e lista.</summary>
     private async Task RunAsync(Func<OpResult> work, string busyText)
     {
         _working = true;
@@ -335,6 +408,7 @@ public sealed class OptimizationsView : UserControl
         }
     }
 
+    /// <summary>Mostra mensagens, erro e aviso de reinício do resultado da operação.</summary>
     private void ShowResult(OpResult res)
     {
         _logPanel.Children.Clear();

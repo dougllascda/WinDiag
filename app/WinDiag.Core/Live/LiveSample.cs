@@ -55,7 +55,9 @@ public sealed class LiveSample
 /// </summary>
 public sealed class LiveSampler : IDisposable
 {
+    /// <summary>Leitor de CPU e memória.</summary>
     private readonly CpuLive _cpu = new();
+    /// <summary>Leitor de GPU.</summary>
     private readonly GpuLive _gpu = new();
 
     /// <summary>Lê uma amostra. Nunca lança exceção; leituras com falha ficam null.</summary>

@@ -13,8 +13,11 @@ namespace WinDiag.App;
 /// <summary>Aplicativo WPF. Aplica o tema antes de criar a primeira janela e registra o tratamento global de exceções.</summary>
 public partial class App : Application
 {
+    /// <summary>Trava que serializa a escrita do log de erros (várias threads podem falhar ao mesmo tempo).</summary>
     private static readonly object LogLock = new();
+    /// <summary>Quantidade de exceções de UI tratadas nesta sessão; ao chegar a 10 o app encerra para não ficar em laço de erro.</summary>
     private int _errorCount;
+    /// <summary>true enquanto o diálogo de erro está aberto, para não empilhar vários diálogos.</summary>
     private bool _dialogOpen;
 
     /// <summary>Pasta dos logs de erro: %LocalAppData%\WinDiag\logs (um arquivo por dia).</summary>
@@ -24,6 +27,7 @@ public partial class App : Application
     /// <summary>Inicializa o tratamento de exceções, o tema (preferência salva ou automático) e abre a janela principal.</summary>
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Três redes de segurança: UI thread (mantém o app vivo), qualquer thread e tarefas não observadas (só registram no log).
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             WriteLog("AppDomain.UnhandledException (terminating=" + args.IsTerminating + ")", args.ExceptionObject as Exception);
@@ -34,6 +38,7 @@ public partial class App : Application
         };
 
         base.OnStartup(e);
+        // O idioma é definido antes de qualquer janela existir.
         // O idioma é definido antes de qualquer janela existir.
         try { Loc.Set(UserPrefs.Load().Language); }
         catch { Loc.Set("Auto"); }
@@ -49,6 +54,7 @@ public partial class App : Application
         w.Show();
     }
 
+    /// <summary>Trata exceções não capturadas da UI thread: registra no log, marca como tratada e avisa uma única vez por vez.</summary>
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         var file = WriteLog("Dispatcher.UnhandledException", e.Exception);

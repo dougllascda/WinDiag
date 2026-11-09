@@ -1,10 +1,10 @@
-# publish.ps1 - gera os artefatos de release do WinDiag em dist\
+# tools\publish.ps1 - gera os artefatos de release do WinDiag em dist\
 #   dist\WinDiag-Portable-{versao}.exe   self-contained, arquivo unico, comprimido (nao exige nada instalado)
 #   dist\WinDiag-{versao}-fx.exe         framework-dependent, arquivo unico, pequeno (exige .NET 8 Desktop Runtime)
 #   dist\WinDiag-Setup-{versao}.exe      instalador Inno Setup (so se o ISCC.exe estiver disponivel)
 #   dist\SHA256SUMS.txt
 #
-# Uso: pwsh -File publish.ps1 [-SkipTests] [-Scan]
+# Uso: pwsh -File tools\publish.ps1 [-SkipTests] [-Scan]
 #   A versao vem de app\Directory.Build.props.
 #
 # Assinatura (opcional): se a variavel de ambiente WINDIAG_SIGN_CMD existir, ela e executada
@@ -14,7 +14,7 @@
 # Veja docs\SIGNING.md.
 param([switch]$SkipTests, [switch]$Scan)
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)  # raiz do repositorio (pai de tools\)
 $app = Join-Path $root 'app'
 $dist = Join-Path $root 'dist'
 $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'

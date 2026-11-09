@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="Logo do WinDiag" width="96">
+  <img src="../assets/logo.png" alt="Logo do WinDiag" width="96">
 </p>
 
 <h1 align="center">WinDiag</h1>
@@ -9,30 +9,34 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <b>Português (Brasil)</b>
+  <a href="../../README.md">English</a> | <b>Português (Brasil)</b>
 </p>
 
 <p align="center">
   <a href="https://github.com/dougllascda/WinDiag/releases/latest"><img alt="Última versão" src="https://img.shields.io/github/v/release/dougllascda/WinDiag"></a>
   <a href="https://github.com/dougllascda/WinDiag/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/dougllascda/WinDiag/total"></a>
   <a href="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dougllascda/WinDiag/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="Licença" src="https://img.shields.io/github/license/dougllascda/WinDiag"></a>
+  <a href="../../LICENSE"><img alt="Licença" src="https://img.shields.io/badge/licen%C3%A7a-source--available-orange"></a>
   <img alt="Plataforma: Windows 10 | 11" src="https://img.shields.io/badge/plataforma-Windows%2010%20%7C%2011-0078D4">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
 </p>
 
 <p align="center">
-  <img src="docs/assets/overview-dark.png" alt="Aba Visão geral do WinDiag com a nota de configuração para jogos e os cartões de hardware" width="860">
+  <img src="../assets/overview-dark.png" alt="Aba Visão geral do WinDiag com a nota de configuração para jogos e os cartões de hardware" width="860">
 </p>
 
 <table>
   <tr>
-    <td align="center"><img src="docs/assets/analysis.png" alt="Análise da plataforma" width="420"><br><sub>Análise da plataforma</sub></td>
-    <td align="center"><img src="docs/assets/sensors.png" alt="Sensores" width="420"><br><sub>Sensores</sub></td>
+    <td align="center"><img src="../assets/analysis.png" alt="Análise da plataforma" width="420"><br><sub>Análise da plataforma</sub></td>
+    <td align="center"><img src="../assets/sensors.png" alt="Sensores" width="420"><br><sub>Sensores</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/assets/optimizations.png" alt="Otimizações" width="420"><br><sub>Otimizações</sub></td>
-    <td align="center"><img src="docs/assets/overview-light.png" alt="Visão geral, tema claro" width="420"><br><sub>Visão geral, tema claro</sub></td>
+    <td align="center"><img src="../assets/optimizations.png" alt="Otimizações" width="420"><br><sub>Otimizações</sub></td>
+    <td align="center"><img src="../assets/overview-light.png" alt="Visão geral, tema claro" width="420"><br><sub>Visão geral, tema claro</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../assets/overview-work.png" alt="Visão geral no perfil Trabalho" width="420"><br><sub>Perfil Trabalho: visão geral</sub></td>
+    <td align="center"><img src="../assets/work.png" alt="Aba Trabalho com impressoras e programas de fábrica" width="420"><br><sub>Perfil Trabalho: impressoras e programas de fábrica</sub></td>
   </tr>
 </table>
 
@@ -46,6 +50,7 @@ O WinDiag abre já lendo tudo, sem botão "detectar": processador, placa-mãe, m
 - Otimizações reversíveis: um interruptor por item, snapshot antes de cada alteração e desfazer só daquele item.
 - Aba Sensores no estilo HWiNFO (atual, mín., máx., média), com alertas de temperatura, ventoinha, VRM e disco.
 - Estimativa de fonte, com aviso se a fonte informada por você parecer fraca.
+- Perfil de uso **Jogos | Trabalho**: o perfil Trabalho cobre impressoras, programas de fábrica (com recomendação e desinstalação pelo desinstalador oficial), bateria e energia de notebook, Windows Update e tempo de inicialização; as abas de jogo ficam ocultas no perfil Trabalho.
 - Modo Simples (linguagem comum) e Detalhado; interface e relatórios em português do Brasil e inglês.
 - Sem telemetria, sem rede, sem download em tempo de execução e sem código gerado em runtime.
 
@@ -73,7 +78,7 @@ Confirme a procedência do build com o [GitHub CLI](https://cli.github.com/):
 gh attestation verify .\WinDiag-Setup-<versão>.exe --repo dougllascda/WinDiag
 ```
 
-Mais detalhes em [docs/SIGNING.md](docs/SIGNING.md) (em inglês).
+Mais detalhes em [docs/SIGNING.md](../SIGNING.md) (em inglês).
 
 ## Recursos
 
@@ -82,6 +87,7 @@ Mais detalhes em [docs/SIGNING.md](docs/SIGNING.md) (em inglês).
 - **CPU, Placa-mãe, Memória, Placa de vídeo, Monitores, Armazenamento, Sistema e segurança:** inventário com leituras ao vivo (clock por thread, carga, RAM, temperatura, potência, clocks e PCIe da GPU).
 - **Sensores:** valores atual, mín., máx. e média. Lê do HWiNFO (com "Shared Memory Support" ativado) e da biblioteca LibreHardwareMonitor embutida.
 - **Otimizações:** um interruptor por item. Ligar salva um snapshot antes; desligar restaura só aquele item. Itens já ajustados fora do WinDiag (ex.: AtlasOS) aparecem travados. O histórico de snapshots permite restaurar um snapshot inteiro.
+- **Perfil de uso (Jogos | Trabalho):** Jogos mantém a análise voltada a jogos, a Sessão de jogo e a Captura. Trabalho mostra impressoras, programas de fábrica (recomendação e remoção pelo desinstalador oficial de cada programa), bateria e energia de notebook, Windows Update e tempo de inicialização, e oculta as abas de jogo.
 - **Sessão de jogo:** lista os apps pesados em segundo plano e fecha só os que você marcar.
 - **Captura:** mede CPU, GPU, DPC, disco, paginação e RAM a cada segundo enquanto você joga, identifica o processo do jogo pela carga 3D da GPU e resume com percentis (P50/P95/P99).
 - **Configurações:** tema (Automático, Claro, Escuro), modo Simples/Detalhado, idioma, sua fonte, status dos sensores, pastas de dados e licenças.
@@ -108,10 +114,14 @@ Mais detalhes em [docs/SIGNING.md](docs/SIGNING.md) (em inglês).
 | Hypervisor (risco alto) | `bcdedit /set hypervisorlaunchtype off` |
 | HPET forçado | `bcdedit /deletevalue useplatformclock` |
 | MPO (experimental) | `Dwm\OverlayTestMode` = 5 |
+| Plano de energia (perfil Trabalho) | PC de mesa em Economia de energia → Alto desempenho; notebook em Alto/Máximo desempenho → Equilibrado (reversível; só se o plano alvo existir) |
+| Reiniciar spooler | reinicia o serviço `Spooler` (não reversível) |
+| Limpar fila de impressão | remove os trabalhos de impressão pendentes (não reversível) |
 | Temporários | apaga arquivos de `%TEMP%` e `C:\Windows\Temp` (não reversível) |
+| Desinstalar programas de fábrica | abre o desinstalador oficial do próprio programa; nunca silencioso, nunca automático (não reversível) |
 
 - Itens de risco alto pedem para digitar `CONFIRMO` antes de serem aplicados.
-- Antes de cada alteração, o estado anterior é salvo em um snapshot JSON em `%ProgramData%\WinDiagMaint\snapshots\`; o histórico fica em `changes.log`. Desligar o interruptor, ou restaurar um snapshot, volta ao valor salvo.
+- As alterações reversíveis salvam um snapshot JSON do estado anterior em `%ProgramData%\WinDiagMaint\snapshots\` antes de serem aplicadas; o histórico fica em `changes.log`. Desligar o interruptor, ou restaurar um snapshot, volta ao valor salvo. As ações pontuais (reiniciar spooler, limpar fila de impressão, limpar temporários) e as desinstalações não são reversíveis, não geram snapshot e sempre pedem confirmação.
 - Sem rede e sem telemetria: o WinDiag não baixa, não envia e não atualiza nada sozinho.
 - Sem ofuscação, empacotador nem código gerado em tempo de execução. As chamadas nativas se limitam a APIs documentadas do Win32.
 - O ganho varia por PC e por jogo, e as otimizações são opcionais. Mais em [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
@@ -142,22 +152,24 @@ O WinDiag não mede tempo de quadro nem aponta qual driver causa latência DPC; 
 
 Requer o [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
+Compilar o código-fonte é permitido apenas para avaliação e para preparar contribuições (veja o [LICENSE](../../LICENSE)); os binários gerados não podem ser distribuídos.
+
 ```powershell
 dotnet build app\WinDiag.sln -c Debug
 dotnet test app\WinDiag.sln
-pwsh -File publish.ps1 -Scan   # gera dist\ e, se houver Kaspersky, faz uma varredura
+pwsh -File tools\publish.ps1 -Scan   # gera dist\ e, se houver Kaspersky, faz uma varredura
 ```
 
 - `app\WinDiag.Core`: coletores, regras, motor de otimizações e relatório.
 - `app\WinDiag.App`: interface WPF.
 - `app\WinDiag.Cli`: ferramenta de teste sem interface (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`).
 - `app\WinDiag.Tests`: testes xUnit.
-- `docs\ARCHITECTURE.md`: visão geral da arquitetura (em inglês).
+- [`docs\ARCHITECTURE.md`](../ARCHITECTURE.md): visão geral da arquitetura (em inglês).
 
 ## Contribuindo
 
-Issues e pull requests são bem-vindos, em português ou inglês. Veja [CONTRIBUTING.pt-BR.md](CONTRIBUTING.pt-BR.md) e o [Código de Conduta](CODE_OF_CONDUCT.md) (em inglês). Para relatar uma vulnerabilidade, veja [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
+Issues e sugestões são bem-vindas, em português ou inglês. Pull requests só são aceitos sob o Contrato de Licença de Contribuidor (CLA) descrito em [CONTRIBUTING.pt-BR.md](CONTRIBUTING.pt-BR.md) (versão em inglês: [.github/CONTRIBUTING.md](../../.github/CONTRIBUTING.md)). Para relatar uma vulnerabilidade, veja [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
 
 ## Licença
 
-[MIT](LICENSE) © 2026 dougllascda. Componentes de terceiros e suas licenças: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Código visível, não é código aberto ("source-available"): você pode usar as versões oficiais gratuitamente em computadores próprios ou que esteja autorizado a administrar, inclusive prestando suporte técnico a terceiros, desde que não redistribua, revenda nem cobre pelo software em si; copiar, modificar, redistribuir ou vender o código ou os binários não é permitido sem autorização por escrito. © 2026 dougllascda. Veja [LICENSE](../../LICENSE) (tradução informativa: [LICENSE.pt-BR.md](LICENSE.pt-BR.md)). Componentes de terceiros e suas licenças: [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).

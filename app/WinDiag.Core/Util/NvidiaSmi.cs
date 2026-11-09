@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace WinDiag.Core.Util;
@@ -6,8 +6,11 @@ namespace WinDiag.Core.Util;
 /// <summary>Leitura do nvidia-smi (somente consulta), sem janela e com timeout. Não exige administrador; sem a ferramenta (ou sem GPU NVIDIA) devolve null/vazio.</summary>
 public static class NvidiaSmi
 {
+    /// <summary>Caminho resolvido do nvidia-smi.exe (null = não encontrado). Protegido por <see cref="Lock"/>.</summary>
     private static string? _path;
+    /// <summary>Indica que a busca do executável já foi feita, para não repetir o acesso ao disco a cada leitura.</summary>
     private static bool _resolved;
+    /// <summary>Sincroniza a resolução do caminho, pois o monitoramento ao vivo e os coletores chamam em threads diferentes.</summary>
     private static readonly object Lock = new();
 
     /// <summary>Caminho do nvidia-smi.exe (PATH, System32, NVSMI). Resolvido uma vez e guardado em cache.</summary>
@@ -25,6 +28,7 @@ public static class NvidiaSmi
         }
     }
 
+    /// <summary>Procura o nvidia-smi.exe no PATH, depois em System32 e em Program Files\NVIDIA Corporation\NVSMI (instalações antigas). Retorna null se não existir.</summary>
     private static string? Resolve()
     {
         var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
@@ -69,9 +73,11 @@ public static class NvidiaSmi
     /// <summary>Executa --query-gpu com os campos e devolve a primeira linha (primeira GPU), ou null em falha.</summary>
     public static string?[]? QueryRow(string smi, IReadOnlyList<string> fields, bool nounits, int timeoutMs)
     {
+        // nounits remove "MiB"/"W"/"MHz" dos valores para permitir conversão numérica direta.
         var args = "--query-gpu=" + string.Join(',', fields) + (nounits ? " --format=csv,noheader,nounits" : " --format=csv,noheader");
         var r = Proc.Run(smi, args, timeoutMs, System.Text.Encoding.UTF8);
         if (!r.Ok) return null;
+        // Só a primeira linha não vazia: em máquinas com várias GPUs NVIDIA os dados da GPU 0 são usados.
         var line = r.Lines.Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
         if (line is null || line.Contains("not a valid", StringComparison.OrdinalIgnoreCase)) return null;
         var row = ParseCsvLine(line);
@@ -104,6 +110,7 @@ public static class NvidiaSmi
         return d;
     }
 
+    /// <summary>Campos clocks_event_reasons.* (ou clocks_throttle_reasons.* em drivers antigos) com o texto exibido em cada idioma. Cada campo vale "Active"/"Not Active".</summary>
     private static readonly (string Key, string Pt, string En)[] ThrottleNames =
     {
         ("gpu_idle", "GPU ocioso", "GPU idle"),
@@ -119,6 +126,7 @@ public static class NvidiaSmi
     /// <summary>Motivos de limitação de clock ativos agora; lista vazia = nenhuma; null = não suportado.</summary>
     public static List<string>? ThrottleReasons(string smi, int timeoutMs = 8000)
     {
+        // Drivers novos renomearam clocks_throttle_reasons para clocks_event_reasons; tenta o nome novo e depois o antigo.
         foreach (var prefix in new[] { "clocks_event_reasons.", "clocks_throttle_reasons." })
         {
             try
@@ -154,6 +162,7 @@ public static class NvidiaSmi
         catch { return null; }
         if (v == 0) return Loc.T("nenhuma", "none");
         var names = new List<string>();
+        // Consome cada bit conhecido; o que sobrar em v é tratado como código desconhecido.
         void Chk(ulong bit, string n) { if ((v & bit) != 0) { names.Add(n); v &= ~bit; } }
         Chk(0x1, Loc.T("GPU ocioso", "GPU idle"));
         Chk(0x2, Loc.T("Clocks de aplicação definidos", "Application clocks set"));
@@ -183,6 +192,7 @@ public static class NvidiaSmi
         catch { return null; }
     }
 
+    /// <summary>Subsystem vendor ID PCI (16 bits baixos de pci.sub_device_id) para o fabricante da placa (parceiro da NVIDIA). Lista de IDs públicos do PCI-SIG; ID ausente vira "n/d".</summary>
     private static readonly Dictionary<string, string> Vendors = new(StringComparer.OrdinalIgnoreCase)
     {
         ["1043"] = "ASUS", ["1458"] = "Gigabyte", ["1462"] = "MSI", ["3842"] = "EVGA", ["19DA"] = "Zotac",
@@ -208,6 +218,7 @@ public static class NvidiaSmi
         var d = v.Split('.');
         if (d.Length == 4 && d[2].Length >= 1)
         {
+            // Formato do driver do Windows: os 5 últimos dígitos (último dígito do 3º campo + 4º campo) formam a versão NVIDIA, ex.: 6 + 1742 = 617.42.
             var n = d[2][^1] + d[3];
             if (n.Length == 5) return n[..3] + "." + n[3..];
         }

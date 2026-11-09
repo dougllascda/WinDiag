@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using WinDiag.Core.Model;
 using WinDiag.Core.Util;
@@ -18,8 +18,10 @@ public sealed class GpuCollector : ICollector
     /// <inheritdoc/>
     public string Title => Loc.T("Placa de vídeo", "Graphics card");
 
+    /// <summary>Chave de classe de adaptadores de vídeo ({4d36e968-...}); subchaves 0000, 0001... guardam DriverDesc e a VRAM real em qwMemorySize.</summary>
     private const string ClassRoot = @"HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 
+    /// <summary>Campos pedidos ao nvidia-smi --query-gpu em uma só chamada (a classe NvidiaSmi cai para um campo por vez se algum não existir na versão do driver).</summary>
     private static readonly string[] SmiFields =
     {
         "driver_version", "vbios_version", "memory.total", "memory.used", "pcie.link.gen.current", "pcie.link.gen.max",
@@ -28,9 +30,11 @@ public sealed class GpuCollector : ICollector
         "utilization.gpu", "pci.sub_device_id", "temperature.memory", "fan.speed", "power.default_limit", "power.min_limit", "power.max_limit",
     };
 
+    /// <summary>Converte texto do nvidia-smi (ponto decimal, cultura invariante) em número; null se inválido.</summary>
     private static double? Dbl(string? s) =>
         double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
 
+    /// <summary>Parte inteira de <see cref="Dbl"/>; 0 se inválido (0 significa "desconhecido" nos campos de link PCIe).</summary>
     private static int Int(string? s) => Dbl(s) is { } d ? (int)d : 0;
 
     /// <summary>Valor numérico do nvidia-smi (ponto decimal) formatado em pt-BR com unidade; "n/d" se ausente.</summary>
@@ -53,6 +57,7 @@ public sealed class GpuCollector : ICollector
             try
             {
                 var name = g.S("Name") ?? "";
+                // Ignora adaptadores virtuais ("Microsoft Basic Display", "Remote Display") que não representam a GPU física.
                 if (Regex.IsMatch(name, "Basic|Remote")) continue;
                 var drvVer = g.S("DriverVersion");
                 bool nv = name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
@@ -92,6 +97,7 @@ public sealed class GpuCollector : ICollector
         return res;
     }
 
+    /// <summary>Lê a VRAM de cada adaptador no registro (HardwareInformation.qwMemorySize, 64 bits). Necessário porque Win32_VideoController.AdapterRAM é de 32 bits e satura em 4 GB.</summary>
     private static List<(string Desc, long Bytes)> ReadClassVram()
     {
         var list = new List<(string, long)>();
@@ -113,6 +119,7 @@ public sealed class GpuCollector : ICollector
         return list;
     }
 
+    /// <summary>Dados do driver NVIDIA via nvidia-smi: VBIOS, VRAM, clocks, potência, link PCIe (atual, máximo da GPU e do host), banda aproximada e BAR1 (Resizable BAR). Sem a ferramenta ou sem resposta, só registra nota.</summary>
     private static void CollectSmi(SectionResult res, SystemFacts facts)
     {
         var smi = NvidiaSmi.Path;
@@ -154,6 +161,7 @@ public sealed class GpuCollector : ICollector
         facts.GpuPcieWidthMax = wMax > 0 ? wMax : null;
         // Limite de potência máximo medido (usado na estimativa de fonte); senão o limite aplicado.
         facts.GpuPowerLimitW = Dbl(F("power.max_limit")) is > 0 and var pmax ? pmax : Dbl(F("power.limit")) is > 0 and var plim ? plim : null;
+        // O link PCIe cai de geração em repouso (economia de energia), por isso "atual abaixo do máximo" sozinho não é problema.
         bool atMax = genCur > 0 && genCur == genMax;
         string curNote = atMax ? Loc.T("no máximo disponível", "at the maximum available") : Loc.T("abaixo do máximo: o link cai em repouso e sobe sob carga", "below the maximum: the link drops at idle and rises under load");
         string Gen(int n) => n > 0 ? n.ToString() : Fmt.NA;
@@ -196,6 +204,7 @@ public sealed class GpuCollector : ICollector
         if (bar is not null && vramMiB is > 0)
         {
             facts.Bar1MiB = bar;
+            // BAR1 cobrindo ~a VRAM inteira (>= 90%) = Resizable BAR ativo; <= 512 MiB = janela clássica de 256/512 MiB (desligado); entre os dois, indeterminado (null).
             facts.ReBarActive = bar >= vramMiB * 0.9 ? true : bar <= 512 ? false : null;
             g.Add("BAR1 (Resizable BAR)", $"{Fmt.Num(bar.Value)} MiB (VRAM {Fmt.Num(vramMiB.Value)} MiB)");
             if (bar >= vramMiB * 0.9)
@@ -213,6 +222,7 @@ public sealed class GpuCollector : ICollector
         }
     }
 
+    /// <summary>Recursos do subsistema gráfico lidos do registro: HAGS (HwSchMode 2 = ativo), Game DVR, Modo de Jogo, MPO (OverlayTestMode 5 = desativado) e otimizações de jogos em janela (SwapEffectUpgradeEnable). Só leitura; correções passam pelo FixEngine.</summary>
     private static void CollectSubsystem(SectionResult res, SystemFacts facts)
     {
         int? hags = Reg.GetInt(@"HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode");
