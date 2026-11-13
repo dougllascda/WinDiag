@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using WinDiag.Core;
 using WinDiag.Core.Fixes;
@@ -120,10 +120,13 @@ public sealed class SnapshotHistoryWindow : Window
     private async Task RestoreAsync(SnapshotFile snap)
     {
         if (_working) return;
+        if (Operations.IsBusy) { Operations.WarnBusy(this); return; }
         var when = Fmt.DateTimeSec(snap.Created);
         if (!ConfirmDialog.Ask(this, Loc.T("Restaurar snapshot", "Restore snapshot"), Loc.T($"Restaurar o snapshot de {when}?", $"Restore the snapshot from {when}?"),
                 Loc.T("Os itens reversíveis voltam aos valores salvos. Antes disso, o estado atual é gravado em um novo snapshot, então a restauração também pode ser desfeita.", "Reversible items return to their saved values. Before that, the current state is written to a new snapshot, so the restore can also be undone.")))
             return;
+        using var ticket = Operations.TryBegin(Loc.T("Restaurar snapshot", "Restore snapshot"));
+        if (ticket is null) { Operations.WarnBusy(this); return; }
         _working = true;
         _busy.Visibility = Visibility.Visible;
         OpResult res;

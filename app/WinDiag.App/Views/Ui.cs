@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -164,6 +164,55 @@ public static class Ui
     /// <summary>Abre a seção (e destaca o achado de Id/título informado) na janela principal.</summary>
     public static void GoTo(string sectionKey, string? findingId = null) =>
         (Application.Current?.MainWindow as MainWindow)?.GoTo(sectionKey, findingId);
+
+    /// <summary>Faixa de aviso com borda colorida (pincel do tema) e texto em negrito.</summary>
+    public static Border WarnBanner(string text, string brushKey = "WarnBrush")
+    {
+        var b = Res(brushKey);
+        return new Border
+        {
+            BorderBrush = b,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = new Thickness(0, 0, 0, 10),
+            Child = new TextBlock { Text = text, Foreground = b, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap },
+        };
+    }
+
+    /// <summary>Faixa "aberto com outra conta de administrador" (null se a leitura não indica isso).</summary>
+    public static Border? OtherUserBanner(WinDiag.Core.Model.SystemFacts? facts)
+    {
+        if (facts is null || !facts.ElevatedAsOtherUser) return null;
+        string user;
+        try { user = WinDiag.Core.Util.SessionUser.SessionUserName ?? WinDiag.Core.Fmt.NA; }
+        catch { user = WinDiag.Core.Fmt.NA; }
+        return WarnBanner(WinDiag.Core.Loc.T($"O WinDiag foi aberto com outra conta de administrador. Ajustes e limpezas por usuário não se aplicam à conta {user}.",
+            $"WinDiag was opened with another administrator account. Per-user tweaks and cleanups do not apply to the account {user}."));
+    }
+
+    /// <summary>Abre a aba Ferramentas e destaca o cartão da ferramenta de id informado.</summary>
+    public static void GoToTool(string toolId) =>
+        (Application.Current?.MainWindow as MainWindow)?.GoToTool(toolId);
+
+    /// <summary>Abre uma aba pela chave interna (ex.: "tools").</summary>
+    public static void OpenTab(string key) =>
+        (Application.Current?.MainWindow as MainWindow)?.OpenTab(key);
+
+    /// <summary>Botão "Abrir ferramenta: nome" para a ferramenta que resolve um achado ou passo; null se não há id ou o id é desconhecido.</summary>
+    public static Button? ToolLink(string? toolId)
+    {
+        if (string.IsNullOrWhiteSpace(toolId)) return null;
+        WinDiag.Core.Tools.ToolDefinition? tool;
+        try { tool = WinDiag.Core.Tools.ToolCatalog.Get(toolId); }
+        catch { return null; }
+        if (tool is null) return null;
+        var id = tool.Id;
+        var b = new Button { Content = WinDiag.Core.Loc.T("Abrir ferramenta: ", "Open tool: ") + tool.Name, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 8, 2) };
+        System.Windows.Automation.AutomationProperties.SetName(b, WinDiag.Core.Loc.T("Abrir ferramenta: ", "Open tool: ") + tool.Name);
+        b.Click += (_, _) => GoToTool(id);
+        return b;
+    }
 
     /// <summary>Abre a janela "Como fazer na BIOS" para o tópico informado.</summary>
     public static void ShowBios(string topic) => BiosGuideWindow.ShowFor(topic);

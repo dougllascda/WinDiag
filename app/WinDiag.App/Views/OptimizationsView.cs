@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -111,10 +111,11 @@ public sealed class OptimizationsView : UserControl
         if (!facts.IsAdmin)
             _content.Children.Add(Banner(Loc.T("Alterações exigem executar como administrador.", "Changes require running as administrator."), "WarnBrush"));
 
-        _content.Children.Add(BuildHeader(facts, statuses));
+        if (Ui.OtherUserBanner(facts) is { } otherUser) _content.Children.Add(otherUser);
+        _content.Children.Add(BuildHeader(facts));
 
         var profile = facts.Profile;
-        var items = statuses.Where(s => !s.Fix.Temp && !s.Fix.StartupApps).ToList();
+        var items = statuses.Where(s => !s.Fix.StartupApps).ToList();
         var visible = items.Where(s => s.Kind != FixStatusKind.NaoAplicavel && ProfileUi.Matches(s.Fix.Scope, profile))
             .OrderBy(s => s.Kind switch { FixStatusKind.AtivoWinDiag => 0, FixStatusKind.Disponivel => 1, _ => 2 })
             .ToList();
@@ -160,25 +161,14 @@ public sealed class OptimizationsView : UserControl
         };
     }
 
-    /// <summary>Cartão de cabeçalho: texto explicativo, "Limpar temporários" e histórico de snapshots (janela modal, bloqueando a navegação).</summary>
-    private Border BuildHeader(SystemFacts facts, List<FixStatus> statuses)
+    /// <summary>Cartão de cabeçalho: texto explicativo, histórico de snapshots (janela modal, bloqueando a navegação) e atalho discreto para a aba Ferramentas.</summary>
+    private Border BuildHeader(SystemFacts facts)
     {
         var sp = new StackPanel();
         sp.Children.Add(Ui.CardTitleInfo(Loc.T("Otimizações", "Optimizations"), "Otimizações"));
         sp.Children.Add(Ui.Muted(Loc.T("Cada item ligado pelo WinDiag pode ser desligado sozinho, voltando ao valor anterior salvo no snapshot, sem restaurar o snapshot inteiro. Itens que já estavam assim antes do WinDiag (ex.: AtlasOS) aparecem travados, pois não há valor anterior para voltar.", "Each item turned on by WinDiag can be turned off on its own, returning to the previous value saved in the snapshot, without restoring the whole snapshot. Items that were already like this before WinDiag (e.g. AtlasOS) appear locked, since there is no previous value to return to."), 12.5));
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        var temp = statuses.FirstOrDefault(s => s.Fix.Temp);
-        var clean = new Button
-        {
-            Content = Loc.T($"Limpar temporários ({facts.TempMB.ToString("0.#", PtBr)} MB)", $"Clear temporary files ({facts.TempMB.ToString("0.#", PtBr)} MB)"),
-            Padding = new Thickness(12, 5, 12, 5),
-            Margin = new Thickness(0, 0, 8, 0),
-            IsEnabled = temp is not null && temp.Kind != FixStatusKind.NaoAplicavel && !_working,
-        };
-        clean.Click += async (_, _) => await CleanTempAsync();
-        row.Children.Add(clean);
-
         var hist = new Button { Content = Loc.T("Histórico de snapshots", "Snapshot history"), Padding = new Thickness(12, 5, 12, 5) };
         hist.Click += (_, _) =>
         {
@@ -191,6 +181,20 @@ public sealed class OptimizationsView : UserControl
         };
         row.Children.Add(hist);
         sp.Children.Add(row);
+
+        var tools = new TextBlock { Text = Loc.T("Limpeza e reparos estão em Ferramentas", "Cleanup and repairs are in Tools"), Cursor = System.Windows.Input.Cursors.Hand, FontSize = 12, TextDecorations = TextDecorations.Underline, Margin = new Thickness(0, 10, 0, 0), Focusable = true };
+        tools.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        System.Windows.Automation.AutomationProperties.SetName(tools, Loc.T("Abrir a aba Ferramentas", "Open the Tools tab"));
+        tools.MouseLeftButtonUp += (_, _) => Ui.OpenTab("tools");
+        tools.KeyDown += (_, e) =>
+        {
+            if (e.Key is System.Windows.Input.Key.Enter or System.Windows.Input.Key.Space)
+            {
+                e.Handled = true;
+                Ui.OpenTab("tools");
+            }
+        };
+        sp.Children.Add(tools);
         return Ui.Card(sp);
     }
 
@@ -226,33 +230,6 @@ public sealed class OptimizationsView : UserControl
         };
         left.Children.Add(new TextBlock { Text = st.StatusText, Foreground = brush, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
         g.Children.Add(left);
-
-        if (fix.IsAction)
-        {
-            if (st.Kind == FixStatusKind.NaoAplicavel)
-            {
-                // Ação que não se aplica (ex.: spooler desativado de propósito): só o estado, sem botão.
-                var plain = Ui.Card(g);
-                if (inapplicable) plain.Opacity = 0.5;
-                return plain;
-            }
-            var run = new Button
-            {
-                Content = fix.ShortName,
-                Padding = new Thickness(14, 6, 14, 6),
-                IsEnabled = facts.IsAdmin && !inapplicable && st.Kind != FixStatusKind.NaoAplicavel && !_working,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(14, 0, 0, 0),
-            };
-            if (!facts.IsAdmin) run.ToolTip = Loc.T("Alterações exigem executar como administrador.", "Changes require running as administrator.");
-            System.Windows.Automation.AutomationProperties.SetName(run, fix.ShortName);
-            run.Click += async (_, _) => await RunActionAsync(fix);
-            Grid.SetColumn(run, 1);
-            g.Children.Add(run);
-            var actionCard = Ui.Card(g);
-            if (inapplicable) actionCard.Opacity = 0.5;
-            return actionCard;
-        }
 
         var tg = new ToggleButton
         {
@@ -337,13 +314,14 @@ public sealed class OptimizationsView : UserControl
         if (facts is null) return;
         var fix = st.Fix;
         var owner = Window.GetWindow(this);
+        if (Operations.IsBusy) { Operations.WarnBusy(owner); return; }
 
         if (st.Kind == FixStatusKind.AtivoWinDiag)
         {
             var when = (st.SourceFile?.Created)is { } created ? Fmt.DateTime(created) : Fmt.NA;
             if (!ConfirmDialog.Ask(owner, Loc.T("Desfazer otimização", "Undo optimization"), Loc.T($"Desfazer só este item? Volta ao valor salvo em {when}.", $"Undo only this item? It returns to the value saved on {when}."), fix.ShortName))
                 return;
-            await RunAsync(() => new FixEngine().Disable(st), Loc.T("Desfazendo...", "Undoing..."));
+            await RunAsync(() => new FixEngine().Disable(st), Loc.T("Desfazendo...", "Undoing..."), fix.ShortName);
         }
         else if (st.Kind == FixStatusKind.Disponivel)
         {
@@ -353,38 +331,15 @@ public sealed class OptimizationsView : UserControl
             if (!ConfirmDialog.Ask(owner, Loc.T("Aplicar otimização", "Apply optimization"), fix.Name + "?", body,
                     requiredText: fix.Risk == FixRisk.Alto ? Loc.T("CONFIRMO", "CONFIRM") : null, warn: fix.Risk != FixRisk.Baixo))
                 return;
-            await RunAsync(() => new FixEngine().Enable(fix, facts), Loc.T("Aplicando...", "Applying..."));
+            await RunAsync(() => new FixEngine().Enable(fix, facts), Loc.T("Aplicando...", "Applying..."), fix.ShortName);
         }
     }
 
-    /// <summary>Executa uma ação pontual (ex.: reiniciar o spooler) depois de confirmação; não há desfazer.</summary>
-    private async Task RunActionAsync(FixDefinition fix)
-    {
-        if (_working) return;
-        var body = Loc.T("Risco: ", "Risk: ") + $"{fix.RiskLabel}\n\n{fix.Explain}"
-            + Loc.T("\n\nEsta ação não pode ser desfeita.", "\n\nThis action cannot be undone.");
-        if (!ConfirmDialog.Ask(Window.GetWindow(this), Loc.T("Executar ação", "Run action"), fix.Name + "?", body,
-                requiredText: fix.Risk == FixRisk.Alto ? Loc.T("CONFIRMO", "CONFIRM") : null, warn: true,
-                okText: Loc.T("Executar", "Run"), cancelText: Loc.T("Cancelar", "Cancel")))
-            return;
-        await RunAsync(() => new FixEngine().RunAction(fix), Loc.T("Executando...", "Running..."));
-    }
-
-    /// <summary>Confirma e limpa os temporários (não reversível; o aviso diz isso).</summary>
-    private async Task CleanTempAsync()
-    {
-        if (_working) return;
-        var facts = _getFacts();
-        var mb = facts?.TempMB.ToString("0.#", PtBr) ?? Fmt.NA;
-        if (!ConfirmDialog.Ask(Window.GetWindow(this), Loc.T("Limpar temporários", "Clear temporary files"), Loc.T($"Limpar as pastas de arquivos temporários (cerca de {mb} MB)?", $"Clear the temporary files folders (about {mb} MB)?"),
-                Loc.T("Arquivos em uso são ignorados. Esta limpeza não é reversível.", "Files in use are skipped. This cleanup is not reversible.")))
-            return;
-        await RunAsync(() => new FixEngine().CleanTemp(), Loc.T("Limpando...", "Clearing..."));
-    }
-
     /// <summary>Executa a operação em thread de fundo com a camada de ocupado, mostra o resultado e refaz varredura e lista.</summary>
-    private async Task RunAsync(Func<OpResult> work, string busyText)
+    private async Task RunAsync(Func<OpResult> work, string busyText, string opName)
     {
+        using var ticket = Operations.TryBegin(opName);
+        if (ticket is null) { Operations.WarnBusy(Window.GetWindow(this)); return; }
         _working = true;
         _beginBusy();
         _busyText.Text = busyText;

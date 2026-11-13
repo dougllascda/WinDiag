@@ -8,9 +8,9 @@ The solution `app\WinDiag.sln` has four projects, all on .NET 8 (`net8.0-windows
 
 | Project | Role |
 |---|---|
-| `WinDiag.Core` | Collectors, analysis rules, live sampling, the optimization engine (FixEngine) and the report. No UI. |
+| `WinDiag.Core` | Collectors, analysis rules, live sampling, the optimization engine (FixEngine), the tools runner (ToolRunner) and the report. No UI. |
 | `WinDiag.App` | WPF interface (tabs, themes, dialogs). Produces `WinDiag.exe`. |
-| `WinDiag.Cli` | Headless test tool (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`). |
+| `WinDiag.Cli` | Headless test tool (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`, `--check-update`, `--download-update`). |
 | `WinDiag.Tests` | xUnit tests. They see the `internal` types of Core through `InternalsVisibleTo`. |
 
 Common configuration (version, nullability, XML documentation) lives in `app\Directory.Build.props`. The version has a single source, the `Version` property; the `AppInfo` class (Core) reads it from the assembly and exposes `AppInfo.Version` and `AppInfo.Title`.
@@ -18,7 +18,7 @@ Common configuration (version, nullability, XML documentation) lives in `app\Dir
 Principles that guide the code:
 
 - **Collectors are read-only** and never crash the app. Every read that can fail is in a `try/catch`; the failure becomes a note (for example "requires administrator") and the field shows `n/d`.
-- **Every change to the system goes through FixEngine**, with a snapshot written first and an undo available.
+- **Every adjustment goes through FixEngine**, with a snapshot written first and an undo available. **Every one-click tool goes through ToolRunner**, with fixed commands, a confirmation that shows them, and a record in `changes.log` and `tools-history.json`.
 - **No cause is claimed without a measurement.** Findings carry the evidence that was read; the text separates what was measured from what is likely.
 - External processes (`nvidia-smi`, `powercfg`, `bcdedit`, `fltmc`) run through `Util.Proc`, with a timeout and no window.
 
@@ -32,6 +32,8 @@ Each area has its own technical document, including a "How to extend" section:
 | [Collectors](modules/collectors.md) | `ICollector` contract, each collector and its sources |
 | [Analysis and rules](modules/analysis-and-rules.md) | `Insights`, `PlatformDb`, `GameScore`, `ActionPlan`, `Bottlenecks`, `Scope` |
 | [Optimizations](modules/optimizations.md) | `FixCatalog`, `FixEngine`, states, snapshots, undo |
+| [Tools](modules/tools.md) | `ToolCatalog`, `ToolRunner`, `DryRun`, `BlockReason`, history |
+| [Updates](modules/updates.md) | `UpdateCheck`, `UpdateInstaller`, frequency, SHA-256, trust model |
 | [Sensors](modules/sensors.md) | HWiNFO, LibreHardwareMonitor, PawnIO, `SensorHub`, alerts |
 | [Work profile](modules/work-profile.md) | `WorkCollector`, `BloatwareDb`, `Uninstaller`, battery, printers |
 | [History and report](modules/history-and-report.md) | `ScanHistory`, `ReportWriter`, masks |
@@ -93,7 +95,7 @@ Output of a collector:
 
 ### Finding
 
-Immutable record: `Sev` (`Ok < Info < Aviso < Atencao`), `Title`, `Evidence`, and optionally `Explain` ("what it means"), `Action` ("what to do"), `FixId` (links to an item in the optimization catalog) and `Impact` (0 to 100, ranks the likely gaming bottlenecks). `Section` is filled in by `ScanEngine`.
+Immutable record: `Sev` (`Ok < Info < Aviso < Atencao`), `Title`, `Evidence`, and optionally `Explain` ("what it means"), `Action` ("what to do"), `FixId` (links to an item in the optimization catalog), `ToolId` (links to the tool that resolves it) and `Impact` (0 to 100, ranks the likely gaming bottlenecks). `Section` is filled in by `ScanEngine`.
 
 ### SystemFacts
 
@@ -113,7 +115,7 @@ The Sensors tab merges two sources: HWiNFO, read from its shared memory when "Sh
 
 ## FixEngine and SnapshotStore
 
-`FixCatalog` defines the items (`FixDefinition`): registry, services, BCD, power plan, memory compression, hibernation, temporary files and startup apps, with `Applicable` (it makes sense to apply) and `IsActive` (already in effect).
+`FixCatalog` defines the items (`FixDefinition`): registry, services, BCD, power plan, memory compression, hibernation, mouse and keyboard accessibility options, default printer and startup apps, with `Applicable` (it makes sense to apply) and `IsActive` (already in effect).
 
 ### States
 
@@ -155,6 +157,10 @@ Files `snapshot_yyyyMMdd_HHmmss.json` in `%ProgramData%\WinDiagMaint\snapshots\`
 
 `State` stores the "before" value of each target (registry, service, BCD, power, MMAgent, hibernation). `SnapshotStore.List()` ignores unreadable files; `LatestEntry` finds the most recent entry (Apply or Undo) for an item, which decides whether the active state was turned on by WinDiag. The history window can also restore a whole snapshot.
 
+## Tools
+
+`ToolCatalog` holds the one-click actions (printing, network, cleanup, system repair, battery, shortcuts). They are not switches and have no snapshot. `ToolRunner` shows nothing by itself: `BlockReason` is checked first, the UI asks for confirmation with the exact commands (read-only tools without administrator run directly), `RunAsync` streams the output through `Proc.RunStreaming` and the run is recorded in `changes.log` and `%ProgramData%\WinDiagMaint\tools-history.json`. The app never restarts the PC. Details: [Tools](modules/tools.md).
+
 ## Report
 
 `ReportWriter` exports one file at a time:
@@ -167,11 +173,11 @@ Files `snapshot_yyyyMMdd_HHmmss.json` in `%ProgramData%\WinDiagMaint\snapshots\`
 
 ## Interface (WPF)
 
-- A single window with tabs: Summary, Platform analysis, Sensors, one tab per collector (CPU, Motherboard, Memory, Graphics, Monitors, Storage, System and security), Optimizations, Game session, Capture and Settings.
+- A single window with tabs: Summary, Platform analysis, Sensors, one tab per collector (CPU, Motherboard, Memory, Graphics, Monitors, Storage, System and security), Optimizations, Tools, Game session, Capture and Settings.
 - Inventory tabs are filled by the `SectionReady` event as collectors finish; live values come from `LiveSampler`.
 - `ThemeManager` switches between Automatic (follows Windows), Light and Dark by updating the brushes of a shared palette in place (`Themes\ThemeManager.cs`; styles in `Themes\Styles.xaml`).
 - The Optimizations tab shows one card per item with a switch, according to the `FixStatus`.
-- Every action that changes the system asks for confirmation and uses `FixEngine`.
+- Every action that changes the system asks for confirmation and uses `FixEngine` (adjustments) or `ToolRunner` (tools).
 
 ## Test CLI
 
@@ -179,11 +185,11 @@ Files `snapshot_yyyyMMdd_HHmmss.json` in `%ProgramData%\WinDiagMaint\snapshots\`
 
 ## Decisions
 
-- **No telemetry.** The app sends nothing anywhere.
-- **No downloads.** Nothing is downloaded at runtime; there is no obfuscation, packer, `Reflection.Emit` or runtime-generated code. Only documented Win32 P/Invoke.
+- **No telemetry.** WinDiag does not download or run third-party code. The update check (configurable frequency, weekly by default, can be Manual) queries only the official repository; download and installation happen only on your click, with the file verified by SHA-256. The network tools (connection test: ping to 1.1.1.1 and 8.8.8.8 and one name lookup; clock sync) and DISM use the internet when you run them. See [Updates](modules/updates.md).
+- **No third-party code.** Nothing from third parties is downloaded or run at runtime; there is no obfuscation, packer, `Reflection.Emit` or runtime-generated code. Only documented Win32 P/Invoke.
 - **UAC in Release.** The `app.manifest` manifest requests `requireAdministrator`, because S.M.A.R.T., BCD, minifilters and the optimizations need that access.
 - **`asInvoker` in Debug.** The `app.debug.manifest` manifest runs without elevation to make testing easier; the app reports what was partial ("requires administrator").
-- **Reversibility.** Items with no undo (such as clearing temporary files) are marked not reversible and say so in the UI.
+- **Reversibility.** Adjustments are reversible. Tools are not (except through a restore point) and say so before they run.
 - **Compatibility.** The snapshot format follows the earlier internal versions, and older snapshots appear in the app.
 
 

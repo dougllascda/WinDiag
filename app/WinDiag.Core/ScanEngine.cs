@@ -57,6 +57,8 @@ public sealed class ScanEngine
     public async Task RunAsync(CancellationToken ct = default)
     {
         Facts.IsAdmin = IsAdmin();
+        Facts.ElevatedAsOtherUser = Facts.IsAdmin && Util.SessionUser.ElevatedAsOtherUser;
+        Facts.SessionUserName = Util.SessionUser.SessionUserName;
         try
         {
             var prefs = Settings.UserPrefs.Load();

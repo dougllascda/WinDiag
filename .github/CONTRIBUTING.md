@@ -45,6 +45,8 @@ dotnet run --project app\WinDiag.Cli -- --live 5               # 5 live samples,
 dotnet run --project app\WinDiag.Cli -- --fixes                # state of each optimization (changes nothing)
 dotnet run --project app\WinDiag.Cli -- --dry-enable GAMEDVR   # simulates turning on (nothing is written)
 dotnet run --project app\WinDiag.Cli -- --dry-disable GAMEDVR  # simulates undoing that item only
+dotnet run --project app\WinDiag.Cli -- --tools                # lists the tools
+dotnet run --project app\WinDiag.Cli -- --dry-tool NET_TEST    # shows what a tool would run (runs nothing)
 ```
 
 Run it in an elevated terminal to see complete readings.
@@ -55,7 +57,8 @@ Run it in an elevated terminal to see complete readings.
 - **Sober, technical tone.** Never write "100% safe". **Do not claim a cause without a measurement**: describe what was read and what it may indicate.
 - **XML comments** (`///`) on public types and members.
 - **Collectors are read-only** and must never crash the app. Wrap every read in `try/catch`; a failure becomes a note (for example "requires administrator") and the field shows `n/d`.
-- **Every change to the system goes through `FixEngine`.** Reversible changes save a snapshot in `%ProgramData%\WinDiagMaint\snapshots` first and have an undo. One-off actions (restart spooler, clear print queue, clear temporary files) and uninstallations (which only open the program's own uninstaller, never silently) have no snapshot, but always ask for confirmation.
+- **Every adjustment goes through `FixEngine`.** It saves a snapshot in `%ProgramData%\WinDiagMaint\snapshots` first and has an undo.
+- **Every one-click action goes through `ToolRunner`** (Tools tab). It has fixed commands, no snapshot, always asks for confirmation showing the commands, and is recorded in `changes.log` and `tools-history.json`. Uninstallations only open the program's own uninstaller, never silently.
 - External processes (`nvidia-smi`, `powercfg`, `bcdedit`, `fltmc`) go through `Util.Proc`: with a timeout and no window.
 - No obfuscation, packers, runtime downloads, `Reflection.Emit` or runtime-generated code. Documented Win32 P/Invoke is allowed.
 - Do not mask data in the UI; masking of user name and serial numbers applies only to the exported report.
@@ -83,8 +86,20 @@ Rules live in `app\WinDiag.Core\Rules\` and work on `SystemFacts` and the `Findi
 
 1. In `FixCatalog.All`, add a `FixDefinition` with a unique `Id`, `Name`, `ShortName`, `Risk`, `Reboot`, `Explain`, the targets (`Reg`, `Svc`, `Bcd`, `Power`...), `Applicable` and `IsActive`.
 2. If the target is of a new kind, extend `FixState`/`Capture`/`Apply` in `FixEngine` and make sure the "before" state is saved and restored.
-3. Items that cannot be restored must have `Reversible = false` and say so in `Explain`.
+3. Items that cannot be restored are not optimizations: make them a tool (below).
 4. Test with `--fixes` and `--dry-enable ID` / `--dry-disable ID`, and add tests in `FixTests` (use `SnapshotStore` with a temporary folder).
+
+## Adding a tool
+
+Tools are one-click actions that run once and are not switches (see [docs/modules/tools.md](../docs/modules/tools.md)). A tool contribution needs:
+
+1. A `ToolDefinition` in `ToolCatalog` with a unique `Id`, bilingual texts, category, fixed command lines, and the admin, restart and risk flags.
+2. Fixed commands in the code. No downloads, no generated scripts or `.bat` files, and the tool never restarts the PC.
+3. `DryRun` support that lists the exact commands and changes nothing. Check it with `--dry-tool ID` (and list the catalog with `--tools`).
+4. A `BlockReason` for the cases where it must not run.
+5. Commands run through `Proc.RunStreaming` (timeout, no window, cancelable).
+6. Tests for the catalog, `DryRun` and `BlockReason`.
+7. If the action is reversible and keeps a setting changed, it is an optimization, not a tool.
 
 ## Publishing
 

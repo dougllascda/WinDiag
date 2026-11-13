@@ -46,6 +46,9 @@ public sealed record Finding(
     /// <summary>Perfil a que o achado se aplica (Both = todos). Achados só de jogos têm <see cref="Model.Scope.Gaming"/>; os do perfil Trabalho, <see cref="Model.Scope.Work"/>.</summary>
     public Scope Scope { get; init; } = Scope.Both;
 
+    /// <summary>Id de uma ferramenta (<c>WinDiag.Core.Tools.ToolCatalog</c>) que ajuda a resolver o achado; null se nenhuma.</summary>
+    public string? ToolId { get; set; }
+
     /// <summary>Nome de um BiosTopic com o passo a passo de BIOS relacionado, ou "".</summary>
     public string GuideTopic { get; init; } = "";
 

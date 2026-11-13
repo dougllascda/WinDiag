@@ -384,12 +384,12 @@ public sealed class StorageCollector : ICollector
                 res.Find(Severity.Aviso, Loc.T("Pouco espaço livre em ", "Low free space on ") + dev, Loc.T($"{Fmt.Num(pct, 1)}% livre (SSD)", $"{Fmt.Num(pct, 1)}% free (SSD)"),
                     Loc.T("SSDs ficam mais lentos nas gravações quando quase cheios (menos área para o controlador trabalhar) e o Windows tem menos espaço para cache e atualizações.", "SSDs get slower at writing when nearly full (less area for the controller to work with) and Windows has less room for cache and updates."),
                     Loc.T("Mantenha ao menos 20% livre. Mova jogos e arquivos grandes para outra unidade.", "Keep at least 20% free. Move games and large files to another drive."), "", 20,
-                    id: "storage.low_space." + dev.TrimEnd(':'),
+                    id: "storage.low_space." + dev.TrimEnd(':'), toolId: "DISK_CLEANUP",
                     simple: Loc.T("A unidade está quase cheia. SSD muito cheio fica mais lento e o Windows perde espaço para trabalhar. Apague ou mova arquivos grandes.", "The drive is almost full. A very full SSD gets slower and Windows loses room to work. Delete or move large files."));
             else if (pct < 10)
                 res.Find(Severity.Aviso, Loc.T("Pouco espaço livre em ", "Low free space on ") + dev, Loc.T($"{Fmt.Num(pct, 1)}% livre", $"{Fmt.Num(pct, 1)}% free"),
                     Loc.T("Partição quase cheia.", "Partition almost full."), Loc.T("Libere espaço.", "Free up space."), "", 20,
-                    id: "storage.low_space." + dev.TrimEnd(':'),
+                    id: "storage.low_space." + dev.TrimEnd(':'), toolId: "DISK_CLEANUP",
                     simple: Loc.T("A unidade está quase cheia. Libere espaço apagando ou movendo arquivos grandes.", "The drive is almost full. Free up space by deleting or moving large files."));
         }
     }

@@ -279,7 +279,7 @@ public sealed class SensorsView : UserControl, IDisposable
     /// <summary>Abre um endereço no navegador padrão; ignora falha.</summary>
     private static void OpenUrl(string url)
     {
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        try { WinDiag.Core.Util.Shell.OpenUnelevated(url); }
         catch { /* sem navegador padrão */ }
     }
 

@@ -154,13 +154,14 @@ public sealed class PlanView : UserControl
         if (!string.IsNullOrWhiteSpace(what)) detail.Children.Add(UiExtra.Detail(Loc.T("O que fazer", "What to do"), what));
         if (!string.IsNullOrWhiteSpace(s.Gain)) detail.Children.Add(UiExtra.Detail(Loc.T("Ganho esperado", "Expected gain"), s.Gain));
 
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 2) };
+        var buttons = new WrapPanel { Margin = new Thickness(0, 8, 0, 2) };
         if (!string.IsNullOrWhiteSpace(s.FixId) && _available.Contains(s.FixId))
         {
             var apply = new Button { Content = Loc.T("Aplicar otimização", "Apply optimization"), Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 8, 0) };
             apply.Click += (_, _) => _goTo("optimizations");
             buttons.Children.Add(apply);
         }
+        if (Ui.ToolLink(s.ToolId) is { } toolBtn) buttons.Children.Add(toolBtn);
         if (!string.IsNullOrWhiteSpace(s.SectionKey))
         {
             var details = new Button { Content = Loc.T("Ver detalhes", "View details"), Padding = new Thickness(12, 4, 12, 4) };

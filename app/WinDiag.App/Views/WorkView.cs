@@ -151,6 +151,12 @@ public sealed class WorkView : UserControl
             : Loc.T("Tempo de inicialização não lido", "Startup time not read");
         Line("", Loc.T("Inicialização", "Startup"), boot);
 
+        if (WorkText.Stuck(f) > 0 || f.SpoolerRunning == false)
+        {
+            var unstick = Ui.ToolLink("PRINT_UNSTICK");
+            if (unstick is not null) sp.Children.Add(unstick);
+        }
+
         var btn = new Button { Content = Loc.T("Ver detalhes", "View details"), Padding = new Thickness(12, 5, 12, 5), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
         btn.Click += (_, _) => Ui.SetSimple(false);
         sp.Children.Add(btn);

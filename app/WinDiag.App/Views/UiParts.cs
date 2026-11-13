@@ -120,7 +120,10 @@ public sealed class FindingRow : Border
             _details.Children.Add(bios);
         }
 
-        _hasDetails = simple || tech.Children.Count > 0 || !string.IsNullOrWhiteSpace(f.GuideTopic);
+        var toolBtn = Ui.ToolLink(f.ToolId);
+        if (toolBtn is not null) _details.Children.Add(toolBtn);
+
+        _hasDetails = simple || tech.Children.Count > 0 || !string.IsNullOrWhiteSpace(f.GuideTopic) || toolBtn is not null;
         _chevron = new TextBlock
         {
             Text = expanded ? "" : "",

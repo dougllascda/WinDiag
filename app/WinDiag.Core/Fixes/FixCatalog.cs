@@ -33,14 +33,6 @@ public static class FixCatalog
     /// <summary>Todos os itens do catálogo, na ordem de exibição.</summary>
     public static IReadOnlyList<FixDefinition> All { get; } = new List<FixDefinition>
     {
-        new() { Id = "TEMP",
-            NameText = ("Limpar arquivos temporários (Temp do usuário e do Windows)", "Clean temporary files (user and Windows Temp)"),
-            ShortNameText = ("Limpar temporários", "Clean temporary files"),
-            Reversible = false, Temp = true,
-            ExplainText = ("Apaga arquivos temporários que não estejam em uso. Libera espaço e não altera configurações. Não há como restaurar (são arquivos descartáveis).",
-                "Deletes temporary files that are not in use. Frees space and does not change settings. It cannot be undone (the files are disposable)."),
-            Applicable = f => f.TempMB > 100 },
-
         new() { Id = "GAMEDVR", Scope = Scope.Gaming,
             NameText = ("Desativar captura em segundo plano do Xbox Game DVR", "Turn off Xbox Game DVR background capture"),
             ShortNameText = ("Game DVR desativado", "Game DVR off"),
@@ -174,20 +166,73 @@ public static class FixCatalog
                 "Switches the active power plan only when the current one does not suit office use: on a laptop, from High/Ultimate performance to Balanced; on a desktop, from Power saver to High performance (Balanced and High performance are already acceptable). The target plan must exist in powercfg /list. The current plan's GUID is saved in the snapshot and undo returns to it. If the recommended plan does not exist on this PC (some laptops hide it), the switch fails without changing anything."),
             Applicable = PowerPlanWorkApplicable, IsActive = PowerPlanWorkActive },
 
-        new() { Id = "SPOOLER_RESTART", Scope = Scope.Work, IsAction = true, Reversible = false, Risk = FixRisk.Baixo, SpoolerRestart = true,
-            NameText = ("Reiniciar o serviço de impressão (Spooler)", "Restart the print service (Spooler)"),
-            ShortNameText = ("Spooler reiniciado", "Spooler restarted"),
-            ExplainText = ("Para e inicia o serviço Spooler do Windows (sc stop / sc start). Costuma destravar impressões paradas. Os documentos da fila não são apagados. Ação pontual: não há o que desfazer. Exige administrador.",
-                "Stops and starts the Windows Spooler service (sc stop / sc start). It usually unblocks stalled printing. Documents in the queue are not deleted. One-off action: there is nothing to undo. Requires administrator."),
-            Applicable = f => f.SpoolerDisabled != true && (f.SpoolerRunning == false || f.Printers.Any(p => p.StuckJobs > 0 || p.HasError)) },
+        new() { Id = "POWER_PLAN_GAMING", Scope = Scope.Gaming,
+            NameText = ("Usar o plano de energia Alto desempenho (desktop)", "Use the High performance power plan (desktop)"),
+            ShortNameText = ("Plano Alto desempenho", "High performance plan"), PowerPlan = true, PowerPlanTarget = HighPerformancePlanGuid,
+            ExplainText = ("Só em desktop: se o plano atual for Equilibrado ou Economia de energia e o Alto desempenho existir em powercfg /list, troca para o Alto desempenho, que deixa o processador menos propenso a baixar o clock. O ganho costuma ser pequeno e não é garantido; o consumo em ociosidade sobe um pouco. O GUID do plano atual fica salvo no snapshot e o desfazer volta a ele. Se o plano não existir neste PC, a troca falha sem alterar nada.",
+                "Desktop only: if the current plan is Balanced or Power saver and High performance exists in powercfg /list, switches to High performance, which makes the processor less likely to lower its clock. The gain is usually small and not guaranteed; idle power use goes up a little. The current plan's GUID is saved in the snapshot and undo returns to it. If the plan does not exist on this PC, the switch fails without changing anything."),
+            Applicable = PowerPlanGamingApplicable, IsActive = PowerPlanGamingActive },
 
-        new() { Id = "PRINT_QUEUE_CLEAR", Scope = Scope.Work, IsAction = true, Reversible = false, Risk = FixRisk.Medio, PrintQueueClear = true,
-            NameText = ("Limpar a fila de impressão travada", "Clear the stuck print queue"),
-            ShortNameText = ("Fila de impressão limpa", "Print queue cleared"),
-            ExplainText = ("Para o Spooler, apaga os arquivos da pasta %SystemRoot%\\System32\\spool\\PRINTERS e inicia o Spooler de novo. Os documentos que estavam na fila serão perdidos e precisam ser enviados outra vez. Ação pontual: não há como restaurar a fila. Exige administrador.",
-                "Stops the Spooler, deletes the files in %SystemRoot%\\System32\\spool\\PRINTERS and starts the Spooler again. Documents that were in the queue are lost and must be sent again. One-off action: the queue cannot be restored. Requires administrator."),
-            Applicable = f => f.SpoolerDisabled != true && f.Printers.Any(p => p.StuckJobs > 0) },
+        new() { Id = "MOUSE_ACCEL_OFF", Scope = Scope.Gaming, MouseApply = true,
+            NameText = ("Desativar a aceleração do ponteiro do mouse", "Turn off mouse pointer acceleration"),
+            ShortNameText = ("Aceleração do mouse desligada", "Mouse acceleration off"),
+            Reg = { new(MouseApi.MousePath, "MouseSpeed", "0", RegistryValueKind.String),
+                    new(MouseApi.MousePath, "MouseThreshold1", "0", RegistryValueKind.String),
+                    new(MouseApi.MousePath, "MouseThreshold2", "0", RegistryValueKind.String) },
+            ExplainText = ("Desliga \"Aprimorar a precisão do ponteiro\": o ponteiro passa a andar sempre a mesma distância para o mesmo movimento da mão, o que muita gente prefere em jogos de mira. É questão de preferência, não de FPS. Vale na hora e o desfazer restaura os valores anteriores.",
+                "Turns off \"Enhance pointer precision\": the pointer always moves the same distance for the same hand movement, which many people prefer in aiming games. It is a matter of preference, not FPS. It takes effect immediately and undo restores the previous values."),
+            Applicable = f => !MouseAccelOff(), IsActive = f => MouseAccelOff() },
+
+        new() { Id = "STICKY_KEYS_OFF", Scope = Scope.Gaming, AccessibilityApply = true,
+            NameText = ("Desativar os atalhos de Teclas de Aderência, Filtro e Alternância", "Turn off the Sticky Keys, Filter Keys and Toggle Keys shortcuts"),
+            ShortNameText = ("Atalhos de acessibilidade do teclado desligados", "Keyboard accessibility shortcuts off"),
+            Reg = { new(StickyPath, "Flags", "506", RegistryValueKind.String),
+                    new(FilterPath, "Flags", "122", RegistryValueKind.String),
+                    new(TogglePath, "Flags", "58", RegistryValueKind.String) },
+            ExplainText = ("Impede que apertar Shift cinco vezes, segurar Shift por 8 segundos ou segurar Num Lock por 5 segundos abra o aviso de acessibilidade no meio do jogo. Os recursos continuam disponíveis em Configurações > Acessibilidade; só o atalho do teclado deixa de abrir o aviso. Se você depende deles, não aplique.",
+                "Stops pressing Shift five times, holding Shift for 8 seconds or holding Num Lock for 5 seconds from opening the accessibility prompt in the middle of a game. The features remain available in Settings > Accessibility; only the keyboard shortcut stops opening the prompt. If you rely on them, do not apply this."),
+            Applicable = f => !StickyOff(), IsActive = f => StickyOff() },
+
+        new() { Id = "PRINTER_DEFAULT_LOCK", Scope = Scope.Work,
+            NameText = ("Impedir que o Windows troque a impressora padrão sozinho", "Stop Windows from changing the default printer by itself"),
+            ShortNameText = ("Impressora padrão fixa", "Default printer locked"),
+            Reg = { new(@"HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows", "LegacyDefaultPrinterMode", 1, RegistryValueKind.DWord) },
+            ExplainText = ("Por padrão o Windows define como padrão a última impressora usada, o que faz documentos saírem na impressora errada em quem usa mais de uma. Com este ajuste a impressora padrão só muda quando você escolher. Vale para o seu usuário e o desfazer restaura o valor anterior.",
+                "By default Windows sets the last printer used as the default, which sends documents to the wrong printer for people who use more than one. With this setting the default printer only changes when you choose. It applies to your user and undo restores the previous value."),
+            Applicable = f => f.Printers.Count >= 2 && Reg.GetInt(PrinterModePath, "LegacyDefaultPrinterMode") != 1,
+            IsActive = f => Reg.GetInt(PrinterModePath, "LegacyDefaultPrinterMode") == 1 },
     };
+
+    /// <summary>Chave do registro com o parâmetro que fixa a impressora padrão do usuário.</summary>
+    private const string PrinterModePath = @"HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows";
+    /// <summary>Chave do registro das Teclas de Aderência.</summary>
+    private const string StickyPath = @"HKCU:\Control Panel\Accessibility\StickyKeys";
+    /// <summary>Chave do registro das Teclas de Filtro.</summary>
+    private const string FilterPath = @"HKCU:\Control Panel\Accessibility\Keyboard Response";
+    /// <summary>Chave do registro das Teclas de Alternância.</summary>
+    private const string TogglePath = @"HKCU:\Control Panel\Accessibility\ToggleKeys";
+
+    /// <summary>true se a aceleração do mouse está desligada no registro (MouseSpeed, MouseThreshold1 e MouseThreshold2 iguais a "0").</summary>
+    private static bool MouseAccelOff() =>
+        Reg.GetString(MouseApi.MousePath, "MouseSpeed") == "0" && Reg.GetString(MouseApi.MousePath, "MouseThreshold1") == "0" && Reg.GetString(MouseApi.MousePath, "MouseThreshold2") == "0";
+
+    /// <summary>true se os três atalhos de acessibilidade do teclado estão com os Flags que desligam o aviso (506, 122 e 58).</summary>
+    private static bool StickyOff() =>
+        Reg.GetString(StickyPath, "Flags") == "506" && Reg.GetString(FilterPath, "Flags") == "122" && Reg.GetString(TogglePath, "Flags") == "58";
+
+    /// <summary>
+    /// Aplicabilidade de POWER_PLAN_GAMING: só desktop (fora do AtlasOS), plano atual Equilibrado ou Economia de energia e Alto desempenho listado pelo powercfg.
+    /// </summary>
+    /// <param name="f">Fatos coletados.</param>
+    private static bool PowerPlanGamingApplicable(SystemFacts f) =>
+        !f.IsLaptop && !f.IsAtlas && f.ActivePowerPlanGuid is not null
+        && (SameGuid(f.ActivePowerPlanGuid, BalancedPlanGuid) || SameGuid(f.ActivePowerPlanGuid, PowerSaverPlanGuid))
+        && PlanExists(f, HighPerformancePlanGuid);
+
+    /// <summary>Estado "já em vigor" de POWER_PLAN_GAMING: desktop já em Alto desempenho ou Desempenho máximo.</summary>
+    /// <param name="f">Fatos coletados.</param>
+    private static bool PowerPlanGamingActive(SystemFacts f) =>
+        !f.IsLaptop && f.ActivePowerPlanGuid is not null && (SameGuid(f.ActivePowerPlanGuid, HighPerformancePlanGuid) || SameGuid(f.ActivePowerPlanGuid, UltimatePlanGuid));
 
     /// <summary>GUID do plano "Equilibrado" do Windows.</summary>
     public const string BalancedPlanGuid = "381b4222-f694-41f0-9685-ff5bb260df2e";

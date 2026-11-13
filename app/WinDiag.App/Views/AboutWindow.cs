@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -62,7 +62,7 @@ public sealed class AboutWindow : Window
         licLink.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         licLink.RequestNavigate += (_, e) =>
         {
-            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { }
+            try { WinDiag.Core.Util.Shell.OpenUnelevated(e.Uri.AbsoluteUri); } catch { }
             e.Handled = true;
         };
         var licLinkText = new TextBlock();
@@ -73,7 +73,7 @@ public sealed class AboutWindow : Window
         link.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         link.RequestNavigate += (_, e) =>
         {
-            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { }
+            try { WinDiag.Core.Util.Shell.OpenUnelevated(e.Uri.AbsoluteUri); } catch { }
             e.Handled = true;
         };
         var linkText = new TextBlock { TextWrapping = TextWrapping.Wrap };

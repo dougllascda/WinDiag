@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -95,13 +95,13 @@ public sealed class BloatCardView : UserControl
 
         AddGroup(list, BloatVerdict.Remove, Loc.T("Remover", "Remove"), "WarnBrush", collapsed: false);
         AddGroup(list, BloatVerdict.Optional, Loc.T("Opcional", "Optional"), "InfoBrush", collapsed: false);
-        AddGroup(list, BloatVerdict.Keep, Loc.T("Útil, manter", "Useful, keep"), "OkBrush", collapsed: true);
+        AddGroup(list, BloatVerdict.Keep, Loc.T("Manter", "Keep"), "OkBrush", collapsed: true);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
         var settings = new Button { Content = Loc.T("Abrir Configurações > Aplicativos", "Open Settings > Apps"), Padding = new Thickness(12, 5, 12, 5) };
         settings.Click += (_, _) =>
         {
-            try { Process.Start(new ProcessStartInfo("ms-settings:appsfeatures") { UseShellExecute = true }); }
+            try { WinDiag.Core.Util.Shell.OpenUnelevated("ms-settings:appsfeatures"); }
             catch (Exception ex) { Say(Loc.T("Não foi possível abrir as Configurações: ", "Could not open Settings: ") + ex.Message, "WarnBrush"); }
         };
         row.Children.Add(settings);
@@ -211,12 +211,15 @@ public sealed class BloatCardView : UserControl
     private async Task LaunchAsync(BloatItem b)
     {
         if (_launching) return;
+        if (Operations.IsBusy) { Operations.WarnBusy(Window.GetWindow(this)); return; }
         if (!ConfirmDialog.Ask(Window.GetWindow(this), Loc.T("Desinstalar programa", "Uninstall program"), b.Name + "?",
                 Loc.T("Abre o desinstalador do próprio programa. O WinDiag não remove nada sozinho e não consegue desfazer isso.",
                       "Opens the program's own uninstaller. WinDiag does not remove anything by itself and cannot undo this."),
                 warn: true, okText: Loc.T("Abrir desinstalador", "Open uninstaller"), cancelText: Loc.T("Cancelar", "Cancel")))
             return;
 
+        using var ticket = Operations.TryBegin(Loc.T("Desinstalar ", "Uninstall ") + b.Name);
+        if (ticket is null) { Operations.WarnBusy(Window.GetWindow(this)); return; }
         _launching = true;
         _beginBusy();
         try

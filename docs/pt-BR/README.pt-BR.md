@@ -27,16 +27,19 @@
 
 <table>
   <tr>
+    <td align="center"><img src="../assets/tools.png" alt="Aba Ferramentas com as ferramentas de reparo de um clique" width="420"><br><sub>Ferramentas</sub></td>
+    <td align="center"><img src="../assets/optimizations.png" alt="Otimizações" width="420"><br><sub>Otimizações</sub></td>
+  </tr>
+  <tr>
     <td align="center"><img src="../assets/analysis.png" alt="Análise da plataforma" width="420"><br><sub>Análise da plataforma</sub></td>
     <td align="center"><img src="../assets/sensors.png" alt="Sensores" width="420"><br><sub>Sensores</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="../assets/optimizations.png" alt="Otimizações" width="420"><br><sub>Otimizações</sub></td>
-    <td align="center"><img src="../assets/overview-light.png" alt="Visão geral, tema claro" width="420"><br><sub>Visão geral, tema claro</sub></td>
-  </tr>
-  <tr>
     <td align="center"><img src="../assets/overview-work.png" alt="Visão geral no perfil Trabalho" width="420"><br><sub>Perfil Trabalho: visão geral</sub></td>
     <td align="center"><img src="../assets/work.png" alt="Aba Trabalho com impressoras e programas de fábrica" width="420"><br><sub>Perfil Trabalho: impressoras e programas de fábrica</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="../assets/overview-light.png" alt="Visão geral, tema claro" width="420"><br><sub>Visão geral, tema claro</sub></td>
   </tr>
 </table>
 
@@ -48,11 +51,15 @@ O WinDiag abre já lendo tudo, sem botão "detectar": processador, placa-mãe, m
 - Análise da plataforma: onde está o limite e o que dá para melhorar, só com base em leituras medidas.
 - Diagnóstico explicado: cada achado diz o que significa e o que fazer.
 - Otimizações reversíveis: um interruptor por item, snapshot antes de cada alteração e desfazer só daquele item.
+- Ferramentas de um clique: impressão, rede, limpeza e reparo do sistema, com os comandos exatos mostrados antes de você confirmar.
 - Aba Sensores no estilo HWiNFO (atual, mín., máx., média), com alertas de temperatura, ventoinha, VRM e disco.
 - Estimativa de fonte, com aviso se a fonte informada por você parecer fraca.
 - Perfil de uso **Jogos | Trabalho**: o perfil Trabalho cobre impressoras, programas de fábrica (com recomendação e desinstalação pelo desinstalador oficial), bateria e energia de notebook, Windows Update e tempo de inicialização; as abas de jogo ficam ocultas no perfil Trabalho.
 - Modo Simples (linguagem comum) e Detalhado; interface e relatórios em português do Brasil e inglês.
-- Sem telemetria, sem rede, sem download em tempo de execução e sem código gerado em runtime.
+- Atualização do próprio app com verificação SHA-256, na frequência que você escolher (inclusive Manualmente).
+- Sem telemetria, sem baixar nem executar código de terceiros e sem código gerado em runtime. O uso da internet se limita à verificação de atualizações (só o repositório oficial) e às ferramentas de rede e ao DISM quando você as executa.
+
+Site da documentação: <https://dougllascda.github.io/WinDiag/>
 
 ## Download
 
@@ -88,16 +95,40 @@ Mais detalhes em [docs/SIGNING.md](../SIGNING.md) (em inglês).
 - **Sensores:** valores atual, mín., máx. e média. Lê do HWiNFO (com "Shared Memory Support" ativado) e da biblioteca LibreHardwareMonitor embutida.
 - **Otimizações:** um interruptor por item. Ligar salva um snapshot antes; desligar restaura só aquele item. Itens já ajustados fora do WinDiag (ex.: AtlasOS) aparecem travados. O histórico de snapshots permite restaurar um snapshot inteiro.
 - **Perfil de uso (Jogos | Trabalho):** Jogos mantém a análise voltada a jogos, a Sessão de jogo e a Captura. Trabalho mostra impressoras, programas de fábrica (recomendação e remoção pelo desinstalador oficial de cada programa), bateria e energia de notebook, Windows Update e tempo de inicialização, e oculta as abas de jogo.
+- **Atualizações:** Configurações > Atualizações define a frequência da verificação (Ao abrir o app, Diariamente, Semanalmente, Mensalmente, Manualmente). Havendo versão nova, uma faixa oferece Atualizar agora, Novidades, Pular esta versão e Depois. "Atualizar agora" pede confirmação, baixa o arquivo do seu tipo de instalação, confere o SHA-256, fecha o app, instala e reabre.
+- **Ferramentas:** manutenção de um clique (veja [Ferramentas](#ferramentas)). Cada ferramenta mostra os comandos exatos, pede confirmação e mantém um histórico.
 - **Sessão de jogo:** lista os apps pesados em segundo plano e fecha só os que você marcar.
 - **Captura:** mede CPU, GPU, DPC, disco, paginação e RAM a cada segundo enquanto você joga, identifica o processo do jogo pela carga 3D da GPU e resume com percentis (P50/P95/P99).
 - **Configurações:** tema (Automático, Claro, Escuro), modo Simples/Detalhado, idioma, sua fonte, status dos sensores, pastas de dados e licenças.
 - **Exportar relatório:** um único arquivo HTML (autocontido, claro/escuro, pronto para impressão) ou TXT, com nome de usuário e números de série mascarados.
 
+## Ferramentas
+
+A aba Ferramentas existe nos dois perfis. Os comandos são fixos no código: o WinDiag não grava arquivos `.bat`, não baixa código de terceiros e não gera scripts. Cada ferramenta mostra exatamente o que vai executar. As que alteram algo ou exigem administrador pedem confirmação antes; as somente leitura sem administrador (teste de conexão, relatório de bateria, diagnóstico de memória, atalhos) rodam direto. A saída aparece ao vivo, com botão Cancelar. O WinDiag nunca reinicia o PC.
+
+| Categoria | Ferramenta | O que faz | Admin | Reinício |
+|---|---|---|---|---|
+| Impressão | Destravar fila de impressão | Para o spooler, apaga os trabalhos pendentes e o religa | Sim | Não |
+| Impressão | Reiniciar spooler / Página de teste | Reinicia o serviço / imprime a página de teste do Windows | Sim / Não | Não |
+| Rede | Teste de rede | Faz ping no gateway do adaptador que sai para a internet, em 1.1.1.1 e em 8.8.8.8, e uma resolução de nome; mostra latência, jitter, perda e um veredito. Não altera nada | Não | Não |
+| Rede | Limpar DNS / Renovar IP / Sincronizar hora | `ipconfig /flushdns`, `ipconfig /renew`, `w32tm /resync` | Sim | Não |
+| Rede | Redefinir pilha de rede | `netsh winsock reset` e `netsh int ip reset`. A confirmação lista os IPs fixos que seriam apagados e exige marcar "Estou ciente" | Sim | Sim |
+| Limpeza | Limpeza de disco | Temporários, caches do Windows Update e da Otimização de Entrega, miniaturas, relatórios de erro, lixeira. Você escolhe os itens e vê os tamanhos | Não | Não |
+| Jogos | Cache de shaders | Limpa os caches de shaders do DirectX, NVIDIA e AMD | Não | Não |
+| Reparo | SFC / DISM / CHKDSK | `sfc /scannow`, `DISM /Online /Cleanup-Image /RestoreHealth`, `chkdsk /scan` (só leitura) | Sim | Não |
+| Reparo | Redefinir Windows Update | Para os serviços, renomeia `SoftwareDistribution` e `catroot2`, religa os serviços | Sim | Não |
+| Reparo | Reiniciar Explorer / Diagnóstico de memória | Reinicia o shell / abre o Diagnóstico de Memória do Windows (o Windows pergunta sobre o reinício) | Não | Não |
+| Reparo | Ponto de restauração | Cria um ponto de restauração | Sim | Não |
+| Relatórios | Relatório de bateria | `powercfg /batteryreport`, aberto no navegador | Não | Não |
+| Atalhos | Gerenciador de Dispositivos, impressoras, aplicativos, Windows Update, Gerenciamento de Disco, Monitor de Confiabilidade | Abrem a ferramenta correspondente do Windows | Não | Não |
+
+As ferramentas não são reversíveis, exceto por ponto de restauração, que o WinDiag oferece antes de toda ferramenta de risco não baixo (destravar impressão, redefinir pilha de rede, DISM, redefinir Windows Update). Detalhes: [docs/modules/tools.md](../modules/tools.md) (em inglês).
+
 ## Segurança
 
 **Lê, sem alterar nada:** WMI/CIM, registro, contadores de desempenho, `nvidia-smi --query`, `powercfg /query`, `bcdedit /enum`, `fltmc filters`, `fsutil behavior query` e logs de eventos.
 
-**Altera só quando você liga um interruptor e confirma:**
+**As otimizações alteram algo só quando você liga um interruptor e confirma:**
 
 | Item | Mudança |
 |---|---|
@@ -114,15 +145,17 @@ Mais detalhes em [docs/SIGNING.md](../SIGNING.md) (em inglês).
 | Hypervisor (risco alto) | `bcdedit /set hypervisorlaunchtype off` |
 | HPET forçado | `bcdedit /deletevalue useplatformclock` |
 | MPO (experimental) | `Dwm\OverlayTestMode` = 5 |
+| Aceleração do mouse | desliga "Aprimorar precisão do ponteiro" (Jogos) |
+| Teclas de Aderência/Filtro/Alternância | desliga os atalhos de teclado que as abrem (Jogos) |
+| Plano de energia (Jogos, só PC de mesa) | muda para Alto desempenho, se esse plano existir |
+| Travar impressora padrão (perfil Trabalho) | impede o Windows de trocar a impressora padrão |
 | Plano de energia (perfil Trabalho) | PC de mesa em Economia de energia → Alto desempenho; notebook em Alto/Máximo desempenho → Equilibrado (reversível; só se o plano alvo existir) |
-| Reiniciar spooler | reinicia o serviço `Spooler` (não reversível) |
-| Limpar fila de impressão | remove os trabalhos de impressão pendentes (não reversível) |
-| Temporários | apaga arquivos de `%TEMP%` e `C:\Windows\Temp` (não reversível) |
 | Desinstalar programas de fábrica | abre o desinstalador oficial do próprio programa; nunca silencioso, nunca automático (não reversível) |
 
 - Itens de risco alto pedem para digitar `CONFIRMO` antes de serem aplicados.
-- As alterações reversíveis salvam um snapshot JSON do estado anterior em `%ProgramData%\WinDiagMaint\snapshots\` antes de serem aplicadas; o histórico fica em `changes.log`. Desligar o interruptor, ou restaurar um snapshot, volta ao valor salvo. As ações pontuais (reiniciar spooler, limpar fila de impressão, limpar temporários) e as desinstalações não são reversíveis, não geram snapshot e sempre pedem confirmação.
-- Sem rede e sem telemetria: o WinDiag não baixa, não envia e não atualiza nada sozinho.
+- As otimizações salvam um snapshot JSON do estado anterior em `%ProgramData%\WinDiagMaint\snapshots\` antes de serem aplicadas; o histórico fica em `changes.log`. Desligar o interruptor, ou restaurar um snapshot, volta ao valor salvo.
+- As ferramentas não geram snapshot. Mostram os comandos que vão executar, pedem confirmação quando alteram algo ou exigem administrador, registram cada execução em `changes.log` e em `%ProgramData%\WinDiagMaint\tools-history.json`, e oferecem um ponto de restauração antes de toda ferramenta de risco não baixo. A desinstalação de programas de fábrica também não é reversível e sempre pede confirmação.
+- Sem telemetria. O WinDiag não baixa nem executa código de terceiros. A verificação de atualizações (frequência configurável, padrão semanal, pode ser Manual) consulta apenas o repositório oficial; o download e a instalação só acontecem com o seu clique, com o arquivo conferido por SHA-256. As ferramentas de rede (teste de conexão: ping em 1.1.1.1 e 8.8.8.8 e uma resolução de nome; sincronizar relógio) e o DISM usam a internet quando você as executa. As opções ficam em Configurações > Atualizações (Ao abrir o app, Diariamente, Semanalmente, Mensalmente ou Manualmente). O arquivo baixado é conferido com o `SHA256SUMS.txt` do mesmo release. Os executáveis ainda não têm assinatura de código; por isso a conferência prova integridade, não autoria (veja [docs/modules/updates.md](../modules/updates.md), em inglês).
 - Sem ofuscação, empacotador nem código gerado em tempo de execução. As chamadas nativas se limitam a APIs documentadas do Win32.
 - O ganho varia por PC e por jogo, e as otimizações são opcionais. Mais em [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
 
@@ -135,7 +168,7 @@ Os executáveis ainda não têm assinatura de código, então o SmartScreen pode
 S.M.A.R.T., BCD, minifiltros do sistema de arquivos e as otimizações exigem esse acesso. Sem ele, o app abre mesmo assim e marca as leituras afetadas como parciais ("exige administrador").
 
 **Meu antivírus acusou o arquivo.**
-O executável não é assinado e, quando você liga as otimizações, altera configurações do sistema (registro, BCD, energia). Alguns antivírus podem desconfiar disso. Abra uma issue com o nome da detecção e a versão.
+O executável não é assinado e, quando você liga as otimizações, altera configurações do sistema (registro, BCD, energia) e executa comandos de manutenção. Alguns antivírus podem desconfiar disso. Abra uma issue com o nome da detecção e a versão.
 
 **A temperatura da CPU não aparece.**
 O Windows não expõe o sensor do núcleo sem um driver de terceiros. Abra o HWiNFO com **Shared Memory Support** ativado, ou instale o driver PawnIO pelo site oficial para que a biblioteca LibreHardwareMonitor embutida consiga ler. O WinDiag não inclui, não baixa nem instala esse driver.
@@ -162,7 +195,7 @@ pwsh -File tools\publish.ps1 -Scan   # gera dist\ e, se houver Kaspersky, faz um
 
 - `app\WinDiag.Core`: coletores, regras, motor de otimizações e relatório.
 - `app\WinDiag.App`: interface WPF.
-- `app\WinDiag.Cli`: ferramenta de teste sem interface (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`).
+- `app\WinDiag.Cli`: ferramenta de teste sem interface (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`).
 - `app\WinDiag.Tests`: testes xUnit.
 - [`docs\ARCHITECTURE.md`](../ARCHITECTURE.md): visão geral da arquitetura (em inglês).
 

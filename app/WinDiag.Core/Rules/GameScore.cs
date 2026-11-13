@@ -71,7 +71,13 @@ public static class GameScore
             .OrderByDescending(p => p.Lost).ThenBy(p => p.Area, StringComparer.Ordinal)
             .ToList();
         bool partial = partialReadings && profile == UsageProfile.Work;
-        int score = Math.Clamp(100 - parts.Sum(p => p.Lost), 0, partial ? PartialMaxScore : 100);
+        int raw = Math.Clamp(100 - parts.Sum(p => p.Lost), 0, 100);
+        int score = partial ? Math.Min(raw, PartialMaxScore) : raw;
+        // O teto de nota parcial tira pontos que nenhum achado explica: entra como uma perda própria para a soma bater com a nota exibida.
+        if (score < raw)
+            parts.Add(new ScorePart(Loc.T("Leituras parciais", "Partial readings"), raw - score,
+                Loc.T("algumas leituras não foram possíveis (ex.: exige administrador), então a nota não chega a 100", "some readings were not possible (e.g. requires administrator), so the score cannot reach 100")));
+        if (score < raw) parts = parts.OrderByDescending(p => p.Lost).ThenBy(p => p.Area, StringComparer.Ordinal).ToList();
         string grade = score >= 90 ? Loc.T("Excelente", "Excellent") : score >= 75 ? Loc.T("Boa", "Good") : score >= 55 ? Loc.T("Regular", "Fair") : Loc.T("Limitada", "Limited");
         bool work = profile == UsageProfile.Work;
         string forPt = work ? "trabalho" : "jogos";

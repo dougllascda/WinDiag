@@ -45,6 +45,8 @@ dotnet run --project app\WinDiag.Cli -- --live 5               # 5 amostras ao v
 dotnet run --project app\WinDiag.Cli -- --fixes                # estado de cada otimização (não altera nada)
 dotnet run --project app\WinDiag.Cli -- --dry-enable GAMEDVR   # simula ligar (nada é gravado)
 dotnet run --project app\WinDiag.Cli -- --dry-disable GAMEDVR  # simula desfazer só esse item
+dotnet run --project app\WinDiag.Cli -- --tools                # lista as ferramentas
+dotnet run --project app\WinDiag.Cli -- --dry-tool NET_TEST    # mostra o que uma ferramenta executaria (não executa nada)
 ```
 
 Rode em um terminal como administrador para ver as leituras completas.
@@ -55,7 +57,8 @@ Rode em um terminal como administrador para ver as leituras completas.
 - **Tom sóbrio e técnico.** Nada de "100% seguro". **Não afirme causa sem medição**: descreva o que foi lido e o que isso pode indicar.
 - **Comentários XML** (`///`) em tipos e membros públicos.
 - **Coletores são somente leitura** e nunca derrubam o app. Cada leitura em `try/catch`; falha vira nota (ex.: "exige administrador") e o campo mostra `n/d`.
-- **Toda alteração no sistema passa pelo `FixEngine`.** As alterações reversíveis salvam antes um snapshot em `%ProgramData%\WinDiagMaint\snapshots` e têm desfazer. Ações pontuais (reiniciar spooler, limpar fila de impressão, limpar temporários) e desinstalações (que só abrem o desinstalador do próprio programa, nunca em modo silencioso) não têm snapshot, mas sempre pedem confirmação.
+- **Todo ajuste passa pelo `FixEngine`.** Ele salva antes um snapshot em `%ProgramData%\WinDiagMaint\snapshots` e tem desfazer.
+- **Toda ação de um clique passa pelo `ToolRunner`** (aba Ferramentas). Tem comandos fixos, não gera snapshot, sempre pede confirmação mostrando os comandos e é registrada em `changes.log` e `tools-history.json`. Desinstalações só abrem o desinstalador do próprio programa, nunca em modo silencioso.
 - Processos externos (`nvidia-smi`, `powercfg`, `bcdedit`, `fltmc`) via `Util.Proc`: timeout e sem janela.
 - Não use ofuscação, packer, download em tempo de execução, `Reflection.Emit` ou código gerado em runtime. P/Invoke documentado da Win32 é permitido.
 - Não mascare dados na interface; o mascaramento de usuário e seriais vale só para o relatório exportado.
@@ -83,8 +86,20 @@ As regras ficam em `app\WinDiag.Core\Rules\` e trabalham sobre `SystemFacts` e o
 
 1. Em `FixCatalog.All`, adicione uma `FixDefinition` com `Id` único, `Name`, `ShortName`, `Risk`, `Reboot`, `Explain`, os alvos (`Reg`, `Svc`, `Bcd`, `Power`...), `Applicable` e `IsActive`.
 2. Se o alvo é de um tipo novo, estenda `FixState`/`Capture`/`Apply` no `FixEngine` e garanta que o estado "antes" é gravado e restaurado.
-3. Itens sem como restaurar devem ter `Reversible = false` e dizer isso no `Explain`.
+3. Itens que não podem ser restaurados não são otimizações: faça deles uma ferramenta (abaixo).
 4. Teste com `--fixes` e `--dry-enable ID` / `--dry-disable ID`, e adicione testes em `FixTests` (use `SnapshotStore` com pasta temporária).
+
+## Como adicionar uma ferramenta
+
+Ferramentas são ações de um clique que rodam uma vez e não são interruptores (veja [docs/modules/tools.md](../modules/tools.md), em inglês). Uma contribuição de ferramenta precisa de:
+
+1. Um `ToolDefinition` em `ToolCatalog` com `Id` único, textos bilíngues, categoria, linhas de comando fixas e os indicadores de administrador, reinício e risco.
+2. Comandos fixos no código. Sem download, sem scripts gerados ou arquivos `.bat`, e a ferramenta nunca reinicia o PC.
+3. Suporte a `DryRun` que lista os comandos exatos e não altera nada. Confira com `--dry-tool ID` (e liste o catálogo com `--tools`).
+4. Um `BlockReason` para os casos em que ela não deve rodar.
+5. Comandos executados por `Proc.RunStreaming` (timeout, sem janela, cancelável).
+6. Testes do catálogo, do `DryRun` e do `BlockReason`.
+7. Se a ação é reversível e mantém uma configuração alterada, ela é uma otimização, não uma ferramenta.
 
 ## Como publicar
 

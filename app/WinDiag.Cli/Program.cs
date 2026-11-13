@@ -19,6 +19,8 @@ using WinDiag.Core.Live;
 //   WinDiag.Cli --fixes                 estado de cada otimização do catálogo
 //   WinDiag.Cli --dry-enable ID         simula ligar a otimização ID (nada é gravado)
 //   WinDiag.Cli --dry-disable ID        simula desligar a otimização ID a partir do snapshot que a aplicou
+//   WinDiag.Cli --tools                  lista as ferramentas; --dry-tool ID simula uma delas
+//   WinDiag.Cli --check-update | --download-update   consulta/baixa a última versão (rede, só quando pedido; não aplica)
 Console.OutputEncoding = Encoding.UTF8;
 WinDiag.Core.Model.UsageProfile? profileOverride = null;
 
@@ -174,7 +176,49 @@ if (args.Length > 0 && args[0] == "--dump")
     return 0;
 }
 
-Console.Error.WriteLine(Loc.T("uso: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [arquivo.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID",
-    "usage: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [file.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID"));
+// --tools                 lista as ferramentas (Id, grupo, administrador, reinício)
+// --dry-tool ID           simula a ferramenta ID (nada é executado nem gravado)
+if (args.Length > 0 && args[0] == "--tools")
+{
+    foreach (var tl in WinDiag.Core.Tools.ToolCatalog.All)
+        Console.WriteLine($"{tl.Id,-20} {WinDiag.Core.Tools.ToolCatalog.CategoryName(tl.Category),-18} {Loc.T("admin", "admin")}={(tl.NeedsAdmin ? Loc.T("sim", "yes") : Loc.T("não", "no"))} {Loc.T("reinício", "restart")}={(tl.NeedsRestart ? Loc.T("sim", "yes") : Loc.T("não", "no"))}");
+    return 0;
+}
+
+if (args.Length > 0 && args[0] == "--dry-tool")
+{
+    var tid = args.Length > 1 ? args[1] : "";
+    var tool = WinDiag.Core.Tools.ToolCatalog.Get(tid);
+    if (tool is null) { Console.Error.WriteLine(Loc.T("Id desconhecido: ", "Unknown id: ") + tid); return 1; }
+    var runner = new WinDiag.Core.Tools.ToolRunner(dryRun: true);
+    var tres = await runner.RunAsync(tool, null, CancellationToken.None, null);
+    Console.WriteLine(Loc.T($"Ok={tres.Ok} Reinicio={tres.RebootNeeded} Erro={tres.Error}", $"Ok={tres.Ok} Reboot={tres.RebootNeeded} Error={tres.Error}"));
+    foreach (var m in tres.Messages) Console.WriteLine("  " + m);
+    return tres.Ok ? 0 : 2;
+}
+
+// --check-update          consulta a última versão publicada (única chamada de rede do CLI; só quando pedida)
+// --download-update       baixa e verifica (SHA-256) o arquivo do tipo detectado da última versão, mesmo que não seja mais nova; não aplica
+if (args.Length > 0 && (args[0] == "--check-update" || args[0] == "--download-update"))
+{
+    var ui = await WinDiag.Core.Update.UpdateCheck.CheckAsync(CancellationToken.None);
+    if (ui is null) { Console.Error.WriteLine(Loc.T("Não foi possível consultar a última versão.", "Could not check the latest version.")); return 2; }
+    Console.WriteLine(Loc.T($"Versão atual: {AppInfo.Version}; mais recente: {ui.Version}; mais nova: {ui.IsNewer}", $"Current version: {AppInfo.Version}; latest: {ui.Version}; newer: {ui.IsNewer}"));
+    Console.WriteLine(ui.Url);
+    foreach (var a in ui.Assets) Console.WriteLine($"  {a.Name} ({a.Size} bytes) {a.DownloadUrl}");
+    if (args[0] == "--check-update") return 0;
+    var kind = WinDiag.Core.Update.UpdateInstaller.DetectKind();
+    Console.WriteLine(Loc.T($"Tipo de instalação detectado: {kind}", $"Detected install type: {kind}"));
+    try
+    {
+        var dl = await WinDiag.Core.Update.UpdateInstaller.DownloadAsync(ui, kind, new Progress<double>(d => Console.Error.Write($"\r{d:P0}  ")), CancellationToken.None);
+        Console.Error.WriteLine();
+        Console.WriteLine(Loc.T("Baixado e verificado (SHA-256): ", "Downloaded and verified (SHA-256): ") + dl.Path);
+        return 0;
+    }
+    catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 2; }
+}
+Console.Error.WriteLine(Loc.T("uso: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [arquivo.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID | --tools | --dry-tool ID | --check-update | --download-update",
+    "usage: WinDiag.Cli [--lang pt-BR|en|auto] [--profile gaming|work] --bloat | --dump [file.json] | --history | --live [n] | --sensors [n] | --fixes | --dry-enable ID | --dry-disable ID | --tools | --dry-tool ID | --check-update | --download-update"));
 return 1;
 

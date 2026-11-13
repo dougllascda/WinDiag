@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -292,13 +292,22 @@ public sealed class DashboardView : UserControl
             var f = _findings.FirstOrDefault(x => !string.IsNullOrEmpty(s.FindingId) && x.Id == s.FindingId);
             return f is not null ? GameScore.AreaOf(f, _profile) : GameScore.AreaOf(s.SectionKey, _profile);
         }
-        var steps = _plan.Where(s => StepArea(s) == area).OrderBy(s => s.Order).ToList();
         var inner = new StackPanel();
-        if (steps.Count == 0) inner.Children.Add(Ui.Muted(Loc.T("Nenhum passo do plano para esta área.", "No plan steps for this area."), 12.5));
-        foreach (var s in steps) inner.Children.Add(StepBlock(s, showTitle: true));
         var card = new Border { Padding = new Thickness(12, 8, 12, 6), CornerRadius = new CornerRadius(6), Child = inner };
         card.SetResourceReference(Border.BackgroundProperty, "PanelAltBrush");
         panel.Children.Add(card);
+        // "Leituras parciais" não é uma área de passos: mostra a explicação em vez de uma lista vazia.
+        if (area.Contains("parciais", StringComparison.OrdinalIgnoreCase) || area.Contains("partial", StringComparison.OrdinalIgnoreCase))
+        {
+            inner.Children.Add(Ui.Muted(Loc.T("Algumas leituras não foram possíveis, em geral porque exigem administrador. Enquanto houver leituras parciais, a nota de trabalho não passa de 95. Execute o WinDiag como administrador para completar a leitura.",
+                "Some readings were not possible, usually because they require administrator rights. While readings are partial, the work score does not exceed 95. Run WinDiag as administrator to complete the reading."), 12.5));
+            return;
+        }
+        List<ActionStep> steps;
+        try { steps = _plan.Where(s => StepArea(s) == area).OrderBy(s => s.Order).ToList(); }
+        catch { steps = new List<ActionStep>(); }
+        if (steps.Count == 0) inner.Children.Add(Ui.Muted(Loc.T("Nenhum passo do plano para esta área.", "No plan steps for this area."), 12.5));
+        foreach (var s in steps) inner.Children.Add(StepBlock(s, showTitle: true));
     }
 
     /// <summary>Bloco de um passo do plano: título, o que fazer, ganho esperado e botões "Como fazer na BIOS"/"Ver detalhes".</summary>
@@ -309,7 +318,7 @@ public sealed class DashboardView : UserControl
         var what = Ui.Simple && !string.IsNullOrWhiteSpace(s.Simple) ? s.Simple : s.What;
         if (!string.IsNullOrWhiteSpace(what)) sp.Children.Add(UiExtra.Detail(Loc.T("O que fazer", "What to do"), what));
         if (!string.IsNullOrWhiteSpace(s.Gain)) sp.Children.Add(UiExtra.Detail(Loc.T("Ganho esperado", "Expected gain"), s.Gain));
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
         if (!string.IsNullOrWhiteSpace(s.GuideTopic))
         {
             var topic = s.GuideTopic;
@@ -317,6 +326,7 @@ public sealed class DashboardView : UserControl
             bios.Click += (_, _) => Ui.ShowBios(topic);
             buttons.Children.Add(bios);
         }
+        if (Ui.ToolLink(s.ToolId) is { } toolBtn) buttons.Children.Add(toolBtn);
         if (!string.IsNullOrWhiteSpace(s.SectionKey))
         {
             var section = s.SectionKey;
@@ -350,18 +360,23 @@ public sealed class DashboardView : UserControl
                     if (t.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return t[..^suffix.Length];
                 return t;
             }
-            var good = _findings.Where(f => f.Sev == Severity.Ok && !string.IsNullOrWhiteSpace(f.Simple))
+            var good = _findings.Where(f => f.Sev == Severity.Ok && !string.IsNullOrWhiteSpace(f.Simple) && ProfileUi.Matches(f.Scope, _profile))
                 .OrderBy(f => f.Section == "analise" ? 0 : 1)
                 .GroupBy(Topic, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
                 .Take(5).ToList();
             if (good.Count == 0) _good.Children.Add(Ui.Muted(Loc.T("Nenhum item em ordem foi destacado nesta leitura.", "No item in good order was highlighted in this scan."), 13));
             foreach (var f in good)
             {
-                var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2), Cursor = Cursors.Hand, Background = Brushes.Transparent };
-                line.Children.Add(UiExtra.Icon("", 14, "OkBrush"));
+                var line = new Grid { Margin = new Thickness(0, 2, 0, 2), Cursor = Cursors.Hand, Background = Brushes.Transparent };
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                var tick = UiExtra.Icon("", 14, "OkBrush");
+                tick.VerticalAlignment = VerticalAlignment.Top;
+                tick.Margin = new Thickness(0, 2, 0, 0);
+                line.Children.Add(tick);
                 var t = UiExtra.Text(string.IsNullOrWhiteSpace(f.Simple) ? f.Title : f.Simple, "TextBrush", 13);
                 t.Margin = new Thickness(8, 0, 0, 0);
-                t.MaxWidth = 760;
+                Grid.SetColumn(t, 1);
                 line.Children.Add(t);
                 var section = f.Section;
                 var id = f.Id;
@@ -508,6 +523,7 @@ public sealed class DashboardView : UserControl
         {
             var (pl, ps) = WorkText.Printers(f);
             _printers.Set(pl, ps);
+            _printers.SetAction(WorkText.Stuck(f) > 0 || f.SpoolerRunning == false ? "PRINT_UNSTICK" : null, Loc.T("Destravar fila", "Unstick the queue"));
             if (f.HasBattery)
             {
                 var (bl, bs) = WorkText.Battery(f);
@@ -683,11 +699,26 @@ public sealed class DashboardView : UserControl
             head.Children.Add(Ui.InfoIcon(ptTitle));
             root.Children.Add(head);
             root.Children.Add(_lines);
+            root.Children.Add(_actionHost);
             Child = root;
             MouseLeftButtonUp += (_, _) => goTo(targetTab);
             MouseEnter += (_, _) => SetResourceReference(BorderBrushProperty, "AccentBrush");
             MouseLeave += (_, _) => SetResourceReference(BorderBrushProperty, "LineBrush");
             System.Windows.Automation.AutomationProperties.SetName(this, title + Loc.T(": abrir detalhes", ": open details"));
+        }
+
+        /// <summary>Área do atalho opcional do cartão (ex.: "Destravar fila").</summary>
+        private readonly StackPanel _actionHost = new();
+
+        /// <summary>Mostra (ou remove, se <paramref name="toolId"/> for null) um atalho para uma ferramenta com o rótulo informado.</summary>
+        public void SetAction(string? toolId, string label)
+        {
+            _actionHost.Children.Clear();
+            if (toolId is null) return;
+            var b = new Button { Content = label, Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+            System.Windows.Automation.AutomationProperties.SetName(b, label);
+            b.Click += (_, _) => Ui.GoToTool(toolId);
+            _actionHost.Children.Add(b);
         }
 
         /// <summary>Linhas completas do modo Detalhado.</summary>

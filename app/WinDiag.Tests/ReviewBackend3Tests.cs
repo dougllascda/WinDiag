@@ -249,19 +249,6 @@ public class ReviewBackend3Tests
     }
 
     [Fact]
-    public void SpoolerDisabled_MakesPrintActionsNotApplicable()
-    {
-        var restart = FixCatalog.Get("SPOOLER_RESTART")!;
-        var clear = FixCatalog.Get("PRINT_QUEUE_CLEAR")!;
-        var f = new SystemFacts { SpoolerRunning = false, SpoolerDisabled = true, Printers = { new PrinterInfo { Name = "P", JobCount = 1, StuckJobs = 1 } } };
-        Assert.False(restart.Applicable(f));
-        Assert.False(clear.Applicable(f));
-        f.SpoolerDisabled = false;
-        Assert.True(restart.Applicable(f));
-        Assert.True(clear.Applicable(f));
-    }
-
-    [Fact]
     public void SpoolerDisabledFact_ProducesInfoFinding_WithoutFix()
     {
         var res = new SectionResult { Key = "trabalho", Title = "t" };

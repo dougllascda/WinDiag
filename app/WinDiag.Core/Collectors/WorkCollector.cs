@@ -550,9 +550,9 @@ public sealed class WorkCollector : ICollector
                     $"{stuck} job(s) in the queue for more than {StuckMinutes} min on: {string.Join(", ", f.Printers.Where(p => p.StuckJobs > 0).Select(p => p.Name).Take(3))}"),
                 Loc.T("Um documento parado costuma bloquear os seguintes. Limpar a fila apaga os documentos pendentes, que precisam ser enviados de novo.",
                     "A stalled document usually blocks the ones after it. Clearing the queue deletes the pending documents, which must be sent again."),
-                Loc.T("Limpe a fila de impressão pela correção disponível ou cancele os documentos em Configurações > Impressoras e scanners > Abrir fila de impressão.",
-                    "Clear the print queue with the available fix or cancel the documents in Settings > Printers & scanners > Open print queue."),
-                "PRINT_QUEUE_CLEAR", 35, id: "trabalho.print_stuck", scope: W,
+                Loc.T("Limpe a fila de impressão pela ferramenta Destravar impressão ou cancele os documentos em Configurações > Impressoras e scanners > Abrir fila de impressão.",
+                    "Clear the print queue with the Unstick printing tool or cancel the documents in Settings > Printers & scanners > Open print queue."),
+                "", 35, id: "trabalho.print_stuck", scope: W, toolId: "PRINT_UNSTICK",
                 simple: Loc.T("Há documentos parados na fila de impressão, e isso costuma impedir os próximos de imprimir. Limpar a fila resolve, mas os documentos precisam ser enviados de novo.",
                     "There are documents stuck in the print queue, which usually stops the next ones from printing. Clearing the queue fixes it, but the documents must be sent again."));
 
@@ -569,8 +569,8 @@ public sealed class WorkCollector : ICollector
                 res.Find(Severity.Atencao, Loc.T("Spooler de impressão parado", "Print spooler stopped"), Loc.T("Serviço Spooler não está em execução", "Spooler service is not running"),
                     Loc.T("Sem o Spooler nenhum documento é impresso. Ele pode ter travado ou sido parado por uma falha.",
                         "Without the Spooler nothing prints. It may have hung or been stopped by a failure."),
-                    Loc.T("Reinicie o serviço de impressão pela correção disponível (exige administrador).", "Restart the print service with the available fix (requires administrator)."),
-                    "SPOOLER_RESTART", 35, id: "trabalho.spooler_stopped", scope: W,
+                    Loc.T("Reinicie o serviço de impressão pela ferramenta disponível (exige administrador).", "Restart the print service with the available tool (requires administrator)."),
+                    "", 35, id: "trabalho.spooler_stopped", scope: W, toolId: "SPOOLER_RESTART",
                     simple: Loc.T("O serviço que controla as impressões está parado, então nada imprime. Reiniciá-lo costuma resolver.",
                         "The service that handles printing is stopped, so nothing prints. Restarting it usually fixes it."));
         }
@@ -593,7 +593,7 @@ public sealed class WorkCollector : ICollector
             res.Find(Severity.Aviso, Loc.T("Reinício do Windows pendente", "Windows restart pending"), Loc.T("O Windows Update ou a manutenção do sistema pede reinício", "Windows Update or system servicing is asking for a restart"),
                 Loc.T("Há uma atualização instalada que só termina depois de reiniciar. Até lá, a correção pode não estar em vigor.", "An installed update only finishes after a restart. Until then, the fix may not be in effect."),
                 Loc.T("Salve o trabalho e reinicie o PC (Reiniciar, não Desligar).", "Save your work and restart the PC (Restart, not Shut down)."),
-                impact: 30, id: "trabalho.reboot_pending", scope: W,
+                impact: 30, id: "trabalho.reboot_pending", scope: W, toolId: "OPEN_WINUPDATE",
                 simple: Loc.T("O Windows está esperando um reinício para terminar de instalar uma atualização. Salve o que está fazendo e reinicie.", "Windows is waiting for a restart to finish installing an update. Save your work and restart."));
 
         if (f.LastUpdateInstalled is { } lu && (now - lu).TotalDays > 45)
@@ -608,7 +608,7 @@ public sealed class WorkCollector : ICollector
                 Loc.T("O Windows costuma receber correções todo mês. Muito tempo sem nenhuma pode indicar atualizações pausadas ou falhando. O registro de hotfixes não lista todas as atualizações, então confirme no Windows Update.",
                     "Windows normally receives fixes every month. A long time without any may mean updates are paused or failing. The hotfix log does not list every update, so confirm in Windows Update."),
                 Loc.T("Abra Configurações > Windows Update e clique em Verificar atualizações.", "Open Settings > Windows Update and click Check for updates."),
-                impact: unconfirmed ? 0 : 35, id: "trabalho.update_old", scope: W,
+                impact: unconfirmed ? 0 : 35, id: "trabalho.update_old", scope: W, toolId: "OPEN_WINUPDATE",
                 simple: Loc.T("Faz mais de 45 dias desde a última atualização que o WinDiag conseguiu ver. Vale verificar o Windows Update.", "It has been more than 45 days since the last update WinDiag could see. It is worth checking Windows Update."));
         }
         // --- Bateria
@@ -621,7 +621,7 @@ public sealed class WorkCollector : ICollector
                     wear >= 60
                         ? Loc.T("Considere trocar a bateria. Para ganhar tempo, use o plano Equilibrado e evite calor.", "Consider replacing the battery. To gain time, use the Balanced plan and avoid heat.")
                         : Loc.T("Se a autonomia já atrapalha, considere trocar a bateria; enquanto isso, use o plano Equilibrado e evite calor.", "If battery life already gets in the way, consider replacing the battery; meanwhile, use the Balanced plan and avoid heat."),
-                    impact: wear >= 60 ? 55 : 35, id: "trabalho.battery_wear", scope: W,
+                    impact: wear >= 60 ? 55 : 35, id: "trabalho.battery_wear", scope: W, toolId: "BATTERY_REPORT",
                     simple: Loc.T("A bateria já perdeu boa parte da capacidade e dura menos do que antes. Quando incomodar, a solução é trocar a bateria.", "The battery has lost a good part of its capacity and lasts less than before. When it gets in the way, the fix is to replace the battery."));
             else
                 res.Find(Severity.Ok, Loc.T("Saúde da bateria", "Battery health"), ev, id: "trabalho.battery_wear", scope: W);

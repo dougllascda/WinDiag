@@ -16,6 +16,23 @@ A checklist for the maintainer. The `.github/workflows/release.yml` workflow doe
    With Inno Setup 6 installed, `dist\` will also contain `WinDiag-Setup-X.Y.Z.exe`. Without it, the script warns and skips the installer.
 5. Commit to `main` and wait for CI to turn green.
 
+6. Check the file names the in-app updater depends on. The release **must** publish `SHA256SUMS.txt` and these three exact names, or the automatic update refuses to run:
+   - `WinDiag-Setup-<v>.exe`
+   - `WinDiag-Portable-<v>.exe`
+   - `WinDiag-<v>-fx.exe`
+
+   `<v>` is the version without the `v`. Renaming a file or leaving out `SHA256SUMS.txt` breaks the update for every installed copy. See `docs\modules\updates.md`.
+
+## Brand images
+
+`app\WinDiag.App\Assets\Logo.xaml` is the single source of the logo. The scripts regenerate the derived files; run them when the logo changes and commit the results:
+
+```powershell
+pwsh -File tools\make-icon.ps1               # .ico (16 to 256 px, simplified WinDiagLogoSmall up to 24 px)
+pwsh -File tools\make-social-preview.ps1     # docs\assets\logo.png and social-preview.png
+pwsh -File tools\make-installer-images.ps1   # installer\wizard.bmp (installer side image)
+```
+
 ## Tag and push
 
 ```powershell

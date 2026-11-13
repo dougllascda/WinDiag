@@ -4,9 +4,10 @@
   (app\WinDiag.App\Assets\Logo.xaml, recurso "WinDiagLogo").
 
 .DESCRIPTION
-  Requer Windows PowerShell 5.1 (ou superior) com WPF. Para cada tamanho (16, 24, 32, 48, 64, 128, 256)
+  Requer Windows PowerShell 5.1 (ou superior) com WPF. Para cada tamanho (16, 20, 24, 32, 40, 48, 64, 128, 256)
   o desenho é renderizado com RenderTargetBitmap, codificado em PNG e gravado como entrada PNG de um
-  contêiner ICO. Não usa nenhuma biblioteca externa e é reexecutável (sobrescreve o .ico).
+  contêiner ICO. De 16 a 24 px usa o recurso "WinDiagLogoSmall" (versão simplificada do mesmo desenho).
+  Não usa nenhuma biblioteca externa e é reexecutável (sobrescreve o .ico).
 
 .EXAMPLE
   powershell.exe -STA -ExecutionPolicy Bypass -File tools\make-icon.ps1
@@ -54,8 +55,11 @@ function Render-Png([System.Windows.Media.ImageSource]$img, [int]$size) {
     return ,$ms.ToArray()
 }
 
-$sizes = 16, 24, 32, 48, 64, 128, 256
-$pngs = foreach ($s in $sizes) { ,(Render-Png $image $s) }
+# De 16 a 24 px usa a versão simplificada (só o W, traço grosso): a moldura e os pinos ficariam ilegíveis.
+$small = $dict['WinDiagLogoSmall']
+if ($null -eq $small) { $small = $image }
+$sizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
+$pngs = foreach ($s in $sizes) { if ($s -le 24) { ,(Render-Png $small $s) } else { ,(Render-Png $image $s) } }
 
 # Contêiner ICO: ICONDIR (6 bytes) + ICONDIRENTRY (16 bytes cada) + dados PNG.
 $ms = New-Object System.IO.MemoryStream

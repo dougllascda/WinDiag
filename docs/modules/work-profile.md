@@ -9,13 +9,13 @@ The Work profile (`UsageProfile.Work`) swaps the gaming-oriented view for office
 | Finding id | Check | Fix |
 |---|---|---|
 | `trabalho.printer_offline` | Printer offline or with an error state (`Win32_Printer`) | none |
-| `trabalho.print_stuck` | Jobs in the queue for more than 10 minutes (`Win32_PrintJob`) | `PRINT_QUEUE_CLEAR` |
-| `trabalho.spooler_stopped` / `trabalho.spooler_disabled` | Spooler service state (`Win32_Service`) | `SPOOLER_RESTART` (when stopped) |
+| `trabalho.print_stuck` | Jobs in the queue for more than 10 minutes (`Win32_PrintJob`) | tool `PRINT_UNSTICK` |
+| `trabalho.spooler_stopped` / `trabalho.spooler_disabled` | Spooler service state (`Win32_Service`) | tool `SPOOLER_RESTART` (when stopped) |
 | `trabalho.bloat` | Installed programs classified by `BloatwareDb` | Uninstaller (see below) |
 | `trabalho.reboot_pending` | `RebootRequired` or `RebootPending` registry keys | none |
 | `trabalho.update_old` | Latest `Win32_QuickFixEngineering` install date is old; `ParseInstalledOn` accepts `M/d/yyyy`, local culture or a hexadecimal FILETIME | none |
 | `trabalho.battery_wear` | Battery wear from `BatteryReport` | none |
-| `trabalho.power_plan`, `trabalho.power_battery_high` | Active power plan vs the recommended one; plugged state from `Win32_Battery.BatteryStatus` | `POWER_PLAN_WORK` |
+| `trabalho.power_plan`, `trabalho.power_battery_high` | Active power plan vs the recommended one; plugged state from `Win32_Battery.BatteryStatus` | fix `POWER_PLAN_WORK` |
 | `trabalho.slow_boot` | Last measured boot time | none |
 | `trabalho.low_ram`, `trabalho.system_hdd` | Installed RAM and system drive type | none |
 
@@ -23,12 +23,15 @@ All of them are created with `scope: Scope.Work`. In the score, `GameScore.AreaO
 
 ## Printers
 
-`PrinterInfo` (`Name`, `IsDefault`, `IsNetwork`, `StatusText`, `Offline`, `HasError`, `JobCount`, `StuckJobs`) is built from `Win32_Printer` and `Win32_PrintJob` and stored in `SystemFacts.Printers`. Actions: `SPOOLER_RESTART` restarts the Spooler; `PRINT_QUEUE_CLEAR` stops it, deletes the files of `FixEngine.SpoolDirectory` (`ClearSpoolDirectory`) and starts it again. Both are one-off actions run by `FixEngine.RunAction`, not reversible, and the card says so. The spooler action guarantees that the service is started again even when clearing the queue fails midway. When the spooler is disabled on purpose (`SystemFacts.SpoolerDisabled`), the action is not applicable and the UI shows no button.
+`PrinterInfo` (`Name`, `IsDefault`, `IsNetwork`, `StatusText`, `Offline`, `HasError`, `JobCount`, `StuckJobs`) is built from `Win32_Printer` and `Win32_PrintJob` and stored in `SystemFacts.Printers`. Printing actions are tools, not optimizations (see [Tools](tools.md)): `PRINT_UNSTICK` stops the Spooler, deletes the files in `spool\PRINTERS`, and starts the Spooler and its dependents again; `SPOOLER_RESTART` restarts the service; `PRINT_TEST_PAGE` sends a test page. They run through `ToolRunner` with confirmation, live output and a record in `tools-history.json`, and they are not reversible. The Spooler is started again even when clearing the queue fails midway. When the spooler is disabled on purpose (`SystemFacts.SpoolerDisabled`), `BlockReason` explains it and the tool does not run. A finding carries `ToolId`, so the card offers the matching tool.
 
-`POWER_PLAN_WORK` is the only reversible work item (snapshot with the previous plan GUID). It is offered on a desktop PC whose active plan is Power saver (switches to High performance; Balanced and High performance both count as fine) and on a laptop running High or Ultimate performance (switches to Balanced), and only when the target plan exists in `powercfg /list`. Custom plans are never touched.
+Reversible work items (snapshot) are `POWER_PLAN_WORK` (previous plan GUID) and `PRINTER_DEFAULT_LOCK` (stops Windows from changing the default printer). It is offered on a desktop PC whose active plan is Power saver (switches to High performance; Balanced and High performance both count as fine) and on a laptop running High or Ultimate performance (switches to Balanced), and only when the target plan exists in `powercfg /list`. Custom plans are never touched.
+
+The Work score note shows a "Partial readings" line when a partial-score cap applies, so a low or capped score is explained by the readings that could not be taken (for example "requires administrator").
 
 ## BloatwareDb and Uninstaller
 
+- The factory-programs table is sorted by verdict: Remove, then Optional, then Keep.
 - `BloatwareDb.Classify(name, publisher)` returns `(BloatVerdict, Reason)?`. `BloatVerdict`: `Remove` (promotion, trial or casual game shipped by the OEM), `Optional` (redundant, user decides), `Keep` (driver, panel or BIOS support tool). `Label` gives the localized text. Unknown programs return `null` and are not listed.
 - Items are `BloatItem` (`Name`, `Publisher`, `Version`, `Verdict`, `Reason`, `UninstallCommand`, `IsAppx`, `PackageFullName`) in `SystemFacts.Bloat`.
 - Paid antivirus products (McAfee, Norton and similar) are never classified as `Remove`: a PC without a working antivirus is a worse outcome than a redundant one, so they are `Optional` and the text asks the user to check that another protection is active before uninstalling.
@@ -42,4 +45,4 @@ All of them are created with `scope: Scope.Work`. In the score, `GameScore.AreaO
 
 - **New check.** Add it to `WorkCollector.Collect` with `scope: Scope.Work` and an id starting with `trabalho.`; add the prefix to the area mapping in `GameScore.AreaOf(Finding, profile)`.
 - **New program entry.** Add a pattern and verdict to `BloatwareDb` with a bilingual reason. Prefer `Keep` or `Optional` when unsure; `Remove` only for clear bloat.
-- **New one-off action.** Add a `FixDefinition` with `IsAction = true`, `Scope.Work`, a new flag, and handle it in `FixEngine.RunAction`.
+- **New one-off action.** Add a `ToolDefinition` to `ToolCatalog` and point the finding to it with `toolId:` (see [Tools](tools.md)). Do not add one-off actions to `FixCatalog`.

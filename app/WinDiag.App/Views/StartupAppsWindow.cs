@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using WinDiag.Core;
@@ -108,6 +108,8 @@ public sealed class StartupAppsWindow : Window
         tg.Click += async (_, _) =>
         {
             if (_busy) { tg.IsChecked = it.Enabled; return; }
+            using var ticket = Operations.TryBegin(Loc.T("Apps na inicialização: ", "Startup apps: ") + it.Name);
+            if (ticket is null) { tg.IsChecked = it.Enabled; Operations.WarnBusy(this); return; }
             var want = tg.IsChecked == true;
             SetBusy(true); // uma operação por vez: evita snapshots concorrentes
             OpResult res;

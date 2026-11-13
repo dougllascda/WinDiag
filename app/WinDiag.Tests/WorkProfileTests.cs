@@ -309,19 +309,13 @@ public class WorkProfileTests
     {
         foreach (var id in new[] { "HAGS", "GAMEDVR", "MPO_OFF", "WINDOWED_OPT", "GAMEMODE_ON", "HYPERVISOR_OFF", "HVCI_OFF" })
             Assert.Equal(Scope.Gaming, FixCatalog.Get(id)!.Scope);
-        Assert.Equal(Scope.Both, FixCatalog.Get("TEMP")!.Scope);
         Assert.Equal(Scope.Both, FixCatalog.Get("STARTUP_APPS")!.Scope);
         var plan = FixCatalog.Get("POWER_PLAN_WORK")!;
         Assert.Equal(Scope.Work, plan.Scope);
         Assert.True(plan.Reversible);
-        Assert.False(plan.IsAction);
-        foreach (var id in new[] { "SPOOLER_RESTART", "PRINT_QUEUE_CLEAR" })
-        {
-            var a = FixCatalog.Get(id)!;
-            Assert.Equal(Scope.Work, a.Scope);
-            Assert.True(a.IsAction);
-            Assert.False(a.Reversible);
-        }
+        Assert.Null(FixCatalog.Get("TEMP"));
+        Assert.Null(FixCatalog.Get("SPOOLER_RESTART"));
+        Assert.Null(FixCatalog.Get("PRINT_QUEUE_CLEAR"));
         Assert.Equal(FixCatalog.All.Count, FixCatalog.All.Select(f => f.Id).Distinct().Count());
     }
 
@@ -352,48 +346,14 @@ public class WorkProfileTests
     }
 
     [Fact]
-    public void PrintActions_Applicable_OnlyWithStuckJobsOrSpoolerProblem()
-    {
-        var restart = FixCatalog.Get("SPOOLER_RESTART")!;
-        var clear = FixCatalog.Get("PRINT_QUEUE_CLEAR")!;
-        var ok = new SystemFacts { SpoolerRunning = true, Printers = { new PrinterInfo { Name = "P" } } };
-        Assert.False(restart.Applicable(ok));
-        Assert.False(clear.Applicable(ok));
-        var stuck = new SystemFacts { SpoolerRunning = true, Printers = { new PrinterInfo { Name = "P", JobCount = 2, StuckJobs = 2 } } };
-        Assert.True(restart.Applicable(stuck));
-        Assert.True(clear.Applicable(stuck));
-        var down = new SystemFacts { SpoolerRunning = false };
-        Assert.True(restart.Applicable(down));
-        Assert.False(clear.Applicable(down));
-    }
-
-    [Fact]
-    public void GetStatuses_ReturnsAllScopes_AndActionsAreNeverToggleable()
+    public void GetStatuses_ReturnsAllScopes()
     {
         var store = new SnapshotStore(Path.Combine(Path.GetTempPath(), "wdtest_" + Guid.NewGuid().ToString("N")));
         var facts = new SystemFacts { SpoolerRunning = false, ActivePowerPlanGuid = FixCatalog.PowerSaverPlanGuid, PowerPlanGuids = { FixCatalog.HighPerformancePlanGuid } };
         var st = new FixEngine(store, dryRun: true).GetStatuses(facts);
         Assert.Equal(FixCatalog.All.Count, st.Count);
         Assert.Contains(st, s => s.Fix.Scope == Scope.Gaming);
-        var act = st.Single(s => s.Fix.Id == "SPOOLER_RESTART");
-        Assert.Equal(FixStatusKind.Disponivel, act.Kind);
-        Assert.False(act.CanToggle);
         Assert.Equal(FixStatusKind.Disponivel, st.Single(s => s.Fix.Id == "POWER_PLAN_WORK").Kind);
-    }
-
-    [Fact]
-    public void RunAction_DryRun_ChangesNothing_AndWritesNoSnapshot()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "wdtest_" + Guid.NewGuid().ToString("N"));
-        var eng = new FixEngine(new SnapshotStore(dir), dryRun: true);
-        var r1 = eng.RunAction(FixCatalog.Get("SPOOLER_RESTART")!);
-        var r2 = eng.RunAction(FixCatalog.Get("PRINT_QUEUE_CLEAR")!);
-        Assert.True(r1.Ok && r2.Ok);
-        Assert.All(r1.Messages.Concat(r2.Messages), m => Assert.StartsWith("[simulação]", m));
-        Assert.Null(r1.SnapshotPath);
-        Assert.False(Directory.Exists(dir));
-        var notAction = eng.RunAction(FixCatalog.Get("HAGS")!);
-        Assert.False(notAction.Ok);
     }
 
     [Fact]
@@ -468,12 +428,12 @@ public class WorkProfileTests
         Assert.Equal(Severity.Aviso, off.Sev);
         Assert.Contains("HP LaserJet", off.Evidence);
         var stuck = r.Findings.Single(x => x.Id == "trabalho.print_stuck");
-        Assert.Equal("PRINT_QUEUE_CLEAR", stuck.FixId);
+        Assert.Equal("PRINT_UNSTICK", stuck.ToolId);
         Assert.All(r.Findings, x => { Assert.Equal(Scope.Work, x.Scope); Assert.False(string.IsNullOrWhiteSpace(x.Simple)); });
         Assert.DoesNotContain(r.Findings, x => x.Id.StartsWith("trabalho.spooler"));
 
         var down = Rules(new SystemFacts { SpoolerRunning = false }).Findings.Single();
-        Assert.Equal(("trabalho.spooler_stopped", Severity.Atencao, "SPOOLER_RESTART"), (down.Id, down.Sev, down.FixId));
+        Assert.Equal(("trabalho.spooler_stopped", Severity.Atencao, "SPOOLER_RESTART"), (down.Id, down.Sev, down.ToolId));
         var disabled = Rules(new SystemFacts { SpoolerRunning = false }, new WorkChecks(SpoolerDisabled: true)).Findings.Single();
         Assert.Equal(("trabalho.spooler_disabled", Severity.Info, ""), (disabled.Id, disabled.Sev, disabled.FixId));
     }
@@ -610,7 +570,7 @@ public class WorkProfileTests
             foreach (var x in all.SelectMany(s => s.Findings))
                 foreach (var t in new[] { x.Title, x.Explain, x.Action, x.Simple, x.SevLabel })
                     Assert.False(pt.IsMatch(t), x.Id + ": " + t);
-            foreach (var fx in new[] { "POWER_PLAN_WORK", "SPOOLER_RESTART", "PRINT_QUEUE_CLEAR" })
+            foreach (var fx in new[] { "POWER_PLAN_WORK", "POWER_PLAN_GAMING", "MOUSE_ACCEL_OFF", "STICKY_KEYS_OFF", "PRINTER_DEFAULT_LOCK" })
             {
                 var d = FixCatalog.Get(fx)!;
                 foreach (var t in new[] { d.Name, d.ShortName, d.Explain }) Assert.False(pt.IsMatch(t), fx + ": " + t);

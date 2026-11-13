@@ -6,8 +6,9 @@
 .DESCRIPTION
   The logo is rendered from the same vector drawing used by the app and by tools\make-icon.ps1
   (app\WinDiag.App\Assets\Logo.xaml, resource "WinDiagLogo"). The social preview has a dark
-  background (#14171C), the logo on the left, the product name and an English subtitle, and, if
-  docs\assets\overview-dark.png exists, a rounded thumbnail of it on the right.
+  background (docs\assets\social-bg.jpg darkened, or a flat color if that file is missing), the
+  logo on the left, the product name and an English subtitle, and, if docs\assets\overview-dark.png
+  exists, a rounded thumbnail of it on the right.
   Requires Windows PowerShell 5.1 (or newer) with WPF. Safe to re-run (overwrites the PNGs).
 
 .EXAMPLE
@@ -17,7 +18,7 @@
 param(
     [string]$Logo,
     [string]$AssetsDir,
-    [string]$Subtitle = 'Hardware inventory, explained diagnostics and reversible gaming optimizations for Windows 10/11.'
+    [string]$Subtitle = 'Hardware inventory, explained diagnostics, one-click repair tools and reversible optimizations for gaming and office PCs.'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,7 +84,21 @@ $hasShot = Test-Path $overview
 
 $v = New-Object System.Windows.Media.DrawingVisual
 $dc = $v.RenderOpen()
-$dc.DrawRectangle((New-Brush '#14171C'), $null, (New-Object System.Windows.Rect(0, 0, $W, $H)))
+$dc.DrawRectangle((New-Brush '#0E1422'), $null, (New-Object System.Windows.Rect(0, 0, $W, $H)))
+
+# Optional background art (docs\assets\social-bg.jpg): drawn to cover the canvas, then darkened so the
+# title, the subtitle and the screenshot keep their contrast. Without the file the background stays flat.
+$bgPath = Join-Path $AssetsDir 'social-bg.jpg'
+if (Test-Path $bgPath) {
+    $bgImg = New-Object System.Windows.Media.Imaging.BitmapImage
+    $bgImg.BeginInit(); $bgImg.UriSource = New-Object System.Uri($bgPath); $bgImg.CacheOption = 'OnLoad'; $bgImg.EndInit(); $bgImg.Freeze()
+    $scale = [Math]::Max($W / $bgImg.PixelWidth, $H / $bgImg.PixelHeight)
+    $bw = $bgImg.PixelWidth * $scale; $bh = $bgImg.PixelHeight * $scale
+    $dc.PushClip((New-Object System.Windows.Media.RectangleGeometry((New-Object System.Windows.Rect(0, 0, $W, $H)))))
+    $dc.DrawImage($bgImg, (New-Object System.Windows.Rect((($W - $bw) / 2), (($H - $bh) / 2), $bw, $bh)))
+    $dc.Pop()
+    $dc.DrawRectangle((New-Brush '#590B1220'), $null, (New-Object System.Windows.Rect(0, 0, $W, $H)))
+}
 
 if ($hasShot) {
     $leftW = 560

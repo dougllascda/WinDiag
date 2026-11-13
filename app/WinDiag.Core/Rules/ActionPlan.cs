@@ -28,8 +28,9 @@ public enum ActionCost
 /// <param name="FindingId">Id estável do achado principal ("" se não houver).</param>
 /// <param name="GuideTopic">Nome de um BiosTopic com passo a passo, ou "".</param>
 /// <param name="Simple">Explicação simples para leigos ("" se não houver).</param>
+/// <param name="ToolId">Id da ferramenta (<c>ToolCatalog</c>) que resolve o achado principal, ou null.</param>
 public sealed record ActionStep(string Key, int Order, string Title, string Where, string What, ActionCost Cost, string Gain, Severity Sev, int Impact, string FixId, string SectionKey,
-    string FindingId = "", string GuideTopic = "", string Simple = "");
+    string FindingId = "", string GuideTopic = "", string Simple = "", string? ToolId = null);
 
 /// <summary>Monta a lista ordenada de passos a partir dos achados.</summary>
 public static partial class ActionPlan
@@ -111,7 +112,7 @@ public static partial class ActionPlan
             string simple = !string.IsNullOrEmpty(main.Simple) ? main.Simple : g.Select(x => x.Simple).FirstOrDefault(x => !string.IsNullOrEmpty(x)) ?? "";
             if (!keys.Add(key)) continue;
             var (where, what, cost, gain) = Parse(main);
-            steps.Add(new ActionStep(key, 0, title, where, what, cost, gain, g.Max(x => x.Sev), g.Max(x => x.Impact), main.FixId ?? "", main.Section, main.Id ?? "", guide, simple));
+            steps.Add(new ActionStep(key, 0, title, where, what, cost, gain, g.Max(x => x.Sev), g.Max(x => x.Impact), main.FixId ?? "", main.Section, main.Id ?? "", guide, simple, g.Select(x => x.ToolId).FirstOrDefault(x => !string.IsNullOrEmpty(x))));
         }
 
         return steps

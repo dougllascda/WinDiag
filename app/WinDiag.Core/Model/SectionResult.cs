@@ -95,12 +95,14 @@ public sealed class SectionResult
     /// <param name="simple">Explicação simples para leigos.</param>
     /// <param name="guide">Nome de um BiosTopic, ou "".</param>
     /// <param name="scope">Perfil do achado; <see cref="Scope.Both"/> usa o mapa de Ids de <see cref="Rules.ScopeMap"/> (achados só de jogos).</param>
+    /// <param name="toolId">Id de uma ferramenta do <c>ToolCatalog</c> que ajuda a resolver o achado; null se nenhuma.</param>
     public void Find(Severity sev, string title, string evidence, string explain = "", string action = "", string fixId = "", int impact = 0,
-        string id = "", string simple = "", string guide = "", Scope scope = Scope.Both)
+        string id = "", string simple = "", string guide = "", Scope scope = Scope.Both, string? toolId = null)
     {
         var finalId = string.IsNullOrWhiteSpace(id) ? DefaultId(Key, title) : id;
         Findings.Add(new Finding(sev, title, evidence, explain, action, fixId, impact)
         {
+            ToolId = toolId,
             Section = Key,
             Id = finalId,
             Simple = simple,

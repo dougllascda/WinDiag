@@ -227,7 +227,7 @@ public sealed class SecurityCollector : ICollector
         sg.Add(Loc.T("Pastas temporárias", "Temporary folders"), Loc.T($"{Fmt.Num(tmp, 1)} MB (Temp do usuário + Windows)", $"{Fmt.Num(tmp, 1)} MB (user Temp + Windows)"));
         sg.Add(Loc.T("Cache do Windows Update", "Windows Update cache"), $"{Fmt.Num(wu, 1)} MB");
         // Limiar de 500 MB para considerar temporários acumulados: valor prático do WinDiag (herdado da v7), não norma do Windows.
-        if (tmp > 500) res.Find(Severity.Aviso, Loc.T("Temporários acumulados", "Accumulated temporary files"), $"{Fmt.Num(tmp, 1)} MB", Loc.T("Arquivos temporários acumulados ocupam espaço sem utilidade.", "Accumulated temporary files take up space needlessly."), "", "TEMP", id: "seguranca.temp",
+        if (tmp > 500) res.Find(Severity.Aviso, Loc.T("Temporários acumulados", "Accumulated temporary files"), $"{Fmt.Num(tmp, 1)} MB", Loc.T("Arquivos temporários acumulados ocupam espaço sem utilidade.", "Accumulated temporary files take up space needlessly."), "", "", 0, id: "seguranca.temp", toolId: "DISK_CLEANUP",
             simple: Loc.T("Há muitos arquivos temporários acumulados ocupando espaço. Limpar libera espaço sem afetar seus arquivos pessoais.", "Many temporary files have accumulated and take up space. Cleaning them frees space without affecting your personal files."));
         else res.Find(Severity.Ok, Loc.T("Temporários", "Temporary files"), $"{Fmt.Num(tmp, 1)} MB", id: "seguranca.temp");
     }

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -56,10 +56,11 @@ public sealed class SettingsView : UserControl
     private bool _sensorsBusy;
 
     /// <summary>Cria a aba; <paramref name="rescan"/> refaz a varredura (usado ao salvar a fonte); <paramref name="sensorStatus"/> lê o estado dos sensores (true = detectar de novo).</summary>
-    public SettingsView(Func<Task> rescan, Func<bool, Task<SensorStatus?>>? sensorStatus = null)
+    public SettingsView(Func<Task> rescan, Func<bool, Task<SensorStatus?>>? sensorStatus = null, Func<Task<WinDiag.Core.Update.UpdateInfo?>>? checkNow = null)
     {
         _rescan = rescan;
         _sensorStatus = sensorStatus;
+        _checkNow = checkNow;
         var prefs = Prefs.Read();
         var root = new StackPanel();
 
@@ -120,6 +121,9 @@ public sealed class SettingsView : UserControl
 
         // Dados
         root.Children.Add(Block("Dados", "Data", BuildData()));
+
+        // Atualizações
+        root.Children.Add(Block("Atualizações", "Updates", BuildUpdates(prefs)));
 
         // Sobre
         root.Children.Add(Block("Sobre", "About", BuildAbout()));
@@ -298,7 +302,7 @@ public sealed class SettingsView : UserControl
         try
         {
             Directory.CreateDirectory(dir);
-            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+            WinDiag.Core.Util.Shell.OpenUnelevated(dir);
         }
         catch (Exception ex) { Say(_dataMsg, Loc.T("Não foi possível abrir a pasta: ", "Could not open the folder: ") + ex.Message, "WarnBrush"); }
     }
@@ -344,7 +348,7 @@ public sealed class SettingsView : UserControl
         link.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         link.RequestNavigate += (_, e) =>
         {
-            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { /* sem navegador padrão */ }
+            try { WinDiag.Core.Util.Shell.OpenUnelevated(e.Uri.AbsoluteUri); } catch { /* sem navegador padrão */ }
             e.Handled = true;
         };
         var linkText = new TextBlock { TextWrapping = TextWrapping.Wrap };
@@ -357,6 +361,61 @@ public sealed class SettingsView : UserControl
         return sp;
     }
 
+    /// <summary>Verificação imediata de atualização feita pela janela principal; nula se indisponível.</summary>
+    private readonly Func<Task<WinDiag.Core.Update.UpdateInfo?>>? _checkNow;
+    /// <summary>Códigos gravados em <c>UserPrefs.UpdateFrequency</c>, na ordem do seletor (nomes de <c>UpdateFrequency</c>).</summary>
+    private static readonly string[] UpdateCodes = { "OnStartup", "Daily", "Weekly", "Monthly", "Manual" };
+    /// <summary>Rótulos do seletor de frequência, alinhados a <see cref="UpdateCodes"/>.</summary>
+    private static readonly string[] UpdateLabels = { Loc.T("Ao abrir o app", "On app start"), Loc.T("Diariamente", "Daily"), Loc.T("Semanalmente", "Weekly"), Loc.T("Mensalmente", "Monthly"), Loc.T("Manualmente", "Manually") };
+    /// <summary>Linha "Última verificação".</summary>
+    private readonly TextBlock _lastCheck = new() { Margin = new Thickness(0, 6, 0, 0) };
+    /// <summary>Resultado da última verificação manual.</summary>
+    private readonly TextBlock _updateMsg = new() { Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
+
+    /// <summary>Texto "Última verificação: data ou nunca".</summary>
+    private static string LastCheckText(DateTime? utc) =>
+        Loc.T("Última verificação: ", "Last check: ") + (utc.HasValue ? Fmt.DateTime(utc.Value.ToLocalTime()) : Loc.T("nunca", "never"));
+
+    /// <summary>Bloco "Atualizações": frequência, última verificação, "Verificar agora" e o aviso sobre o acesso à internet.</summary>
+    private StackPanel BuildUpdates(WinDiag.Core.Settings.UserPrefs prefs)
+    {
+        var sp = new StackPanel();
+        int idx = Math.Max(0, Array.IndexOf(UpdateCodes, WinDiag.Core.Settings.UserPrefs.UpdateFrequencyOf(prefs).ToString()));
+        var seg = new Segmented(UpdateLabels, idx, i => Prefs.Update(p => p.UpdateFrequency = UpdateCodes[i]));
+        System.Windows.Automation.AutomationProperties.SetName(seg, Loc.T("Verificar atualizações", "Check for updates"));
+        sp.Children.Add(Labeled(Loc.T("Verificar atualizações", "Check for updates"), seg));
+        _lastCheck.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        _lastCheck.Text = LastCheckText(prefs.LastUpdateCheckUtc);
+        sp.Children.Add(_lastCheck);
+
+        var now = new Button { Content = Loc.T("Verificar agora", "Check now"), Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0), IsEnabled = _checkNow is not null };
+        System.Windows.Automation.AutomationProperties.SetName(now, Loc.T("Verificar atualizações agora", "Check for updates now"));
+        now.Click += async (_, _) => await CheckNowAsync(now);
+        sp.Children.Add(now);
+        sp.Children.Add(_updateMsg);
+        sp.Children.Add(Ui.Muted(Loc.T("O WinDiag não baixa nem executa código de terceiros. A verificação de atualizações consulta apenas o repositório oficial no GitHub e nada é instalado sem a sua confirmação. Ferramentas de rede e o DISM usam a internet quando você as executa.",
+            "WinDiag does not download or run third-party code. The update check queries only the official GitHub repository and nothing is installed without your confirmation. The network tools and DISM use the internet when you run them."), 12.5));
+        return sp;
+    }
+
+    /// <summary>"Verificar agora": consulta a versão (ignora a versão pulada), mostra o resultado e deixa a faixa de aviso aparecer se houver versão nova.</summary>
+    private async Task CheckNowAsync(Button btn)
+    {
+        if (_checkNow is null) return;
+        btn.IsEnabled = false;
+        Say(_updateMsg, Loc.T("Verificando...", "Checking..."), "MutedBrush");
+        try
+        {
+            var info = await _checkNow();
+            _lastCheck.Text = LastCheckText(Prefs.Read().LastUpdateCheckUtc);
+            if (info is null) Say(_updateMsg, Loc.T("Não foi possível verificar agora.", "Could not check right now."), "WarnBrush");
+            else if (!info.IsNewer) Say(_updateMsg, Loc.T($"Você está na versão mais recente ({AppInfo.Version}).", $"You are on the latest version ({AppInfo.Version})."), "OkBrush");
+            else Say(_updateMsg, Loc.T($"WinDiag {info.Version} disponível. Veja a faixa no topo da janela.", $"WinDiag {info.Version} available. See the banner at the top of the window."), "InfoBrush");
+        }
+        catch { Say(_updateMsg, Loc.T("Não foi possível verificar agora.", "Could not check right now."), "WarnBrush"); }
+        finally { btn.IsEnabled = true; }
+    }
+
     /// <summary>Link da licença; só abre o URL fixo do repositório.</summary>
     private static TextBlock LicenseLink()
     {
@@ -364,7 +423,7 @@ public sealed class SettingsView : UserControl
         link.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         link.RequestNavigate += (_, e) =>
         {
-            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { /* sem navegador padrão */ }
+            try { WinDiag.Core.Util.Shell.OpenUnelevated(e.Uri.AbsoluteUri); } catch { /* sem navegador padrão */ }
             e.Handled = true;
         };
         var t = new TextBlock { TextWrapping = TextWrapping.Wrap };
@@ -381,7 +440,7 @@ public sealed class SettingsView : UserControl
             if (!File.Exists(path)) continue;
             try
             {
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                WinDiag.Core.Util.Shell.OpenUnelevated(path);
                 return;
             }
             catch { /* sem programa associado: mostra o texto embutido */ }

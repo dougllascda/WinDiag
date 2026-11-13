@@ -10,3 +10,5 @@
 *.yml text eol=lf
 *.ico binary
 *.png binary
+*.bmp binary
+*.jpg binary

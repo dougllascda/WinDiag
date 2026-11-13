@@ -9,6 +9,10 @@ public sealed class SystemFacts
 {
     /// <summary>true se o WinDiag roda como administrador.</summary>
     public bool IsAdmin { get; set; }
+    /// <summary>true se o WinDiag foi elevado com OUTRA conta de administrador (o usuário da sessão é diferente): HKCU e as pastas de perfil lidas são as do administrador, então ajustes por usuário não se aplicam.</summary>
+    public bool ElevatedAsOtherUser { get; set; }
+    /// <summary>Nome (DOMÍNIO\usuário) do usuário da sessão interativa; null se não lido.</summary>
+    public string? SessionUserName { get; set; }
 
     // --- Sistema (SystemCollector, fase A) ---
     /// <summary>Nome do Windows (Win32_OperatingSystem.Caption).</summary>

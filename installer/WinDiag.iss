@@ -42,6 +42,8 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\app\WinDiag.App\Assets\WinDiag.ico
+; Imagem lateral do assistente (paginas de boas-vindas e conclusao), gerada por tools\make-installer-images.ps1.
+WizardImageFile=wizard.bmp
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Licenca proprietaria "source-available" (WinDiag License); o texto e exibido no assistente.
 LicenseFile=..\LICENSE
@@ -51,6 +53,10 @@ SolidCompression=yes
 OutputBaseFilename=WinDiag-Setup-{#MyAppVersion}
 ; Saida: dist\ por padrao (o tools\publish.ps1 tambem passa /O).
 OutputDir=..\dist
+; Atualizacao pelo proprio app: se o WinDiag ainda estiver fechando quando o instalador comecar,
+; o Gerenciador de Reinicializacao do Windows encerra o processo antes de copiar o executavel.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -76,6 +82,8 @@ Name: "{autodesktop}\WinDiag"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktop
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,WinDiag}"; Flags: nowait postinstall skipifsilent
+; Atualizacao iniciada pelo app (instalador chamado com /SILENT /RELAUNCH=1): reabre o WinDiag ao terminar.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--updated"; Flags: nowait skipifnotsilent; Check: RelaunchRequested
 
 ; A desinstalacao remove apenas a pasta do programa. Preferencias (%AppData%\WinDiag) e historico
 ; (%LocalAppData%\WinDiag) ficam, a menos que o usuario aceite removê-los na pergunta abaixo.
@@ -84,6 +92,12 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,WinDiag}"; Fl
 ; administrador (ou uma conta elevada diferente do usuario que usou o app) desinstalar, os dados do usuario
 ; original nao sao encontrados nem removidos; eles permanecem no perfil dele e podem ser apagados manualmente.
 [Code]
+// True quando o instalador foi chamado pelo proprio app com /RELAUNCH=1 (atualizacao automatica).
+function RelaunchRequested: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   RoamingDir, LocalDir, SnapDir: String;

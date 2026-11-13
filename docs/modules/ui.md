@@ -1,6 +1,6 @@
 # User interface
 
-`WinDiag.App` is a WPF application (`net8.0-windows`) with one window, `MainWindow`. The UI is mostly built in code (`Views\*.cs`); only `App.xaml`, `MainWindow.xaml`, `Themes\Styles.xaml` and `Assets\Logo.xaml` are XAML. The UI never changes the system by itself: every action goes to `FixEngine` after a `ConfirmDialog`.
+`WinDiag.App` is a WPF application (`net8.0-windows`) with one window, `MainWindow`. The UI is mostly built in code (`Views\*.cs`); only `App.xaml`, `MainWindow.xaml`, `Themes\Styles.xaml` and `Assets\Logo.xaml` are XAML. The UI never changes the system by itself: adjustments go to `FixEngine` and tools go to `ToolRunner`, both after a `ConfirmDialog`.
 
 ## MainWindow and tabs by key
 
@@ -20,7 +20,8 @@ Tabs are described by a private `Page` record: `Key` (stable internal identifier
 | `displays` | `monitores` | `SectionView` |
 | `storage` | `armazenamento` | `SectionView` |
 | `system` | `seguranca`, `processos`, `eventos` | `SectionView` |
-| `optimizations` | none | `OptimizationsView` |
+| `optimizations` | none | `OptimizationsView` (own icon) |
+| `tools` | none | `ToolsView` |
 | `session` | none | `GameSessionView` |
 | `capture` | none | `CaptureView` |
 | `settings` | none | `SettingsView` (added by `AddSettingsPage`) |
@@ -29,7 +30,7 @@ Tabs are described by a private `Page` record: `Key` (stable internal identifier
 
 ## Modes
 
-`Ui.Simple` (default true) comes from `UserPrefs.Mode` (`"Simple"` or `"Detailed"`); `Ui.SetSimple` raises `Ui.ModeChanged`, and `MainWindow.OnModeChanged` re-applies it to tabs, the overview and the plan without a new scan. In Simple mode only the tabs in `SimpleTabs` are visible (`overview`, `plan`, `optimizations`, `session`, `sensors`, `work`, `settings`). `FindingRow` shows the plain-language `Finding.Simple` text in Simple mode.
+`Ui.Simple` (default true) comes from `UserPrefs.Mode` (`"Simple"` or `"Detailed"`); `Ui.SetSimple` raises `Ui.ModeChanged`, and `MainWindow.OnModeChanged` re-applies it to tabs, the overview and the plan without a new scan. In Simple mode only the tabs in `SimpleTabs` are visible (`overview`, `plan`, `optimizations`, `tools`, `session`, `sensors`, `work`, `settings`). `FindingRow` shows the plain-language `Finding.Simple` text in Simple mode.
 
 ## Profiles
 
@@ -46,6 +47,14 @@ Tabs are described by a private `Page` record: `Key` (stable internal identifier
 ## Prefs
 
 `Prefs` (internal) is the only way the app reads or writes `UserPrefs` (`%AppData%\WinDiag\settings.json`). `Update(change)` re-reads the file, applies one change and saves, so concurrent changes do not overwrite other fields. If the read fell back to defaults (`UserPrefs.IsFallback`), it does not save and raises `SaveBlocked`; `MainWindow.OnPrefsSaveBlocked` tells the user the preference is valid for this session only.
+
+## Tools tab
+
+`ToolsView` lists the tools by category in both profiles. Each button opens a confirmation (read-only tools without administrator run directly) that shows the exact commands, whether administrator rights or a restart are needed, the estimated duration and the risk. A tool that has a `BlockReason` shows it instead of running. While a tool runs, the live output is shown with a Cancel button. For medium-risk tools the view offers a restore point first. Rules and flow: [Tools](tools.md).
+
+## Settings: updates
+
+`SettingsView` has an Updates block: check frequency (On app start, Daily, Weekly (default), Monthly, Manually), "Last check" and "Check now". `MainWindow.Update.cs` runs the scheduled check after startup and shows a banner (Update now, What's new, Skip this version, Later); `Views\UpdateWindows.cs` has the notes window and the download flow. Nothing is downloaded or installed without a click. WinDiag does not download or run third-party code; the update check queries only the official repository, and the network tools and DISM use the internet only when you run them. Flow and trust model: [Updates](updates.md).
 
 ## Shared widgets
 

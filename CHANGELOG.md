@@ -4,6 +4,38 @@ All notable changes to WinDiag are documented in this file. The format is based 
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-13
+
+### Added
+- **Tools tab** (both profiles): one-click tools with fixed commands. WinDiag shows exactly what will run and asks for confirmation before any tool that changes something or needs administrator rights (read-only tools run directly). It shows the output live with a Cancel button, never restarts the PC, and records each run in `changes.log` and `tools-history.json`. Tools are not reversible, except through a restore point, which is offered before the medium-risk ones.
+  - **Printing:** unstick the print queue, restart the Spooler, print a test page.
+  - **Network:** connection test (router, 1.1.1.1, 8.8.8.8 and a name lookup: latency, jitter, loss and a plain verdict), flush DNS, renew IP, reset the network stack (the confirmation lists any static IPs it would erase), sync time.
+  - **Cleanup:** disk cleanup with selectable items and sizes (temporary files older than 24 hours only; it never follows folder links and never touches a drive root, the user profile, Windows or Program Files), shader cache (DirectX, NVIDIA, AMD).
+  - **System:** SFC, DISM, CHKDSK (read-only scan), reset Windows Update, restart Explorer, Windows Memory Diagnostic, create a restore point.
+  - **Battery:** battery report.
+  - **Shortcuts:** Device Manager, printers, apps, Windows Update, Disk Management, Reliability Monitor.
+- **Four new reversible optimizations** (snapshot and undo): turn off mouse acceleration, turn off the Sticky/Filter/Toggle Keys shortcuts, High performance power plan on desktops (Gaming), and lock the default printer (Work).
+- **Findings point to the tool** that resolves them, in the findings and in the action plan.
+- **Self-update:** Settings > Updates sets the check frequency (On app start, Daily, Weekly by default, Monthly or Manually). The check only reads the latest version from the official repository. A banner offers Update now, What's new, Skip this version and Later. "Update now" asks for confirmation, downloads the file for the installed type (Setup, Portable or fx) only from the official releases, verifies its SHA-256 against the `SHA256SUMS.txt` of the same release (and aborts if it differs), closes the app, installs and reopens it. The installer accepts `/RELAUNCH=1` for this. The executables are not code-signed yet, so the check proves integrity, not authorship.
+- **CLI:** `--tools` lists the tools, `--dry-tool ID` shows what a tool would run without running it, `--check-update` queries the latest version and `--download-update` downloads and verifies the file without applying it.
+
+### Changed
+- **New visual identity:** new logo (a W-shaped pulse line inside a chip frame, on a navy background), drawn as a vector in `Logo.xaml`, the single source. `tools\make-icon.ps1` generates the `.ico` (16 to 256 px, with a simplified small version up to 24 px), `tools\make-social-preview.ps1` generates `logo.png` and `social-preview.png`, and the new `tools\make-installer-images.ps1` generates the installer side image.
+- **Printing and temporary files actions moved from Optimizations to Tools:** restart Spooler, clear print queue and temporary files are now tools. The Optimizations tab has only reversible adjustments.
+- **Factory-installed programs** are sorted by Remove, Optional, Keep.
+- **Partial score note:** the Work profile score shows a "Partial readings" line when a partial-score cap applies.
+- **One operation at a time:** tools, optimizations, uninstalls and updates share a single busy state, and the window cannot be closed in the middle of an operation without cancelling it first, so no service is left stopped.
+- **Opened with another administrator account:** per-user adjustments and cleanups are disabled, with an explanation, because they would change the administrator's profile instead of yours.
+- **Links and folders** opened from the app no longer inherit administrator rights.
+
+### Fixed
+- Timeout message was shown without translation.
+- Repeated icon in the menu (Optimizations now has its own icon).
+- Tab content was not exposed to screen readers (the `PART_SelectedContentHost` name was missing in the `TabControl` template).
+- Output of Windows tools with accented characters was corrupted when the app was in English (OEM code page).
+- Text was cut off in a narrow window in Simple mode.
+- The connection test picked the VPN adapter instead of the router.
+
 ## [1.2.0] - 2026-11-09
 
 ### Changed

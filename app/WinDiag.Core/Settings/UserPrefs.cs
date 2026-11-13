@@ -24,6 +24,22 @@ public sealed class UserPrefs
     /// <summary>Perfil de uso: "" = ainda não escolhido; "Gaming" ou "Work".</summary>
     public string Profile { get; set; } = "";
 
+    /// <summary>Frequência da verificação de atualizações: "Manual", "OnStartup", "Daily", "Weekly" ou "Monthly". Padrão: "Weekly"; valor vazio ou inválido vale "Weekly".</summary>
+    public string UpdateFrequency { get; set; } = "Weekly";
+    /// <summary>Data e hora (UTC) da última verificação de atualização; null se nunca verificou.</summary>
+    public DateTime? LastUpdateCheckUtc { get; set; }
+    /// <summary>Versão que o usuário escolheu pular (ex.: "1.3.0"); null se nenhuma.</summary>
+    public string? SkippedVersion { get; set; }
+
+    /// <summary>Converte a preferência de frequência em <see cref="Update.UpdateFrequency"/>; vazio, nulo ou inválido é Semanal (Weekly).</summary>
+    /// <param name="pref">Valor de <see cref="UpdateFrequency"/>.</param>
+    public static Update.UpdateFrequency UpdateFrequencyOf(string? pref) =>
+        Enum.TryParse<Update.UpdateFrequency>(pref?.Trim(), true, out var f) && Enum.IsDefined(f) && !int.TryParse(pref?.Trim(), out _) ? f : Update.UpdateFrequency.Weekly;
+
+    /// <summary>Converte a frequência de atualização de um conjunto de preferências em <see cref="Update.UpdateFrequency"/>.</summary>
+    /// <param name="prefs">Preferências.</param>
+    public static Update.UpdateFrequency UpdateFrequencyOf(UserPrefs prefs) => UpdateFrequencyOf(prefs.UpdateFrequency);
+
     /// <summary>Converte a preferência de perfil em <see cref="Model.UsageProfile"/>: "Work" (sem diferenciar maiúsculas) é Trabalho; vazio, nulo ou desconhecido é Jogos.</summary>
     /// <param name="pref">Valor de <see cref="Profile"/>.</param>
     public static Model.UsageProfile ProfileOf(string? pref) =>
@@ -95,6 +111,7 @@ public sealed class UserPrefs
             p.Mode = string.IsNullOrWhiteSpace(p.Mode) ? "Simple" : p.Mode;
             p.PlanDone ??= new List<string>();
             p.Profile ??= "";
+            if (string.IsNullOrWhiteSpace(p.UpdateFrequency)) p.UpdateFrequency = "Weekly";
             if (p.PsuWatts is <= 0) p.PsuWatts = null;
             return p;
         }

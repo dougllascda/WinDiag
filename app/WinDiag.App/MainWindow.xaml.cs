@@ -48,7 +48,7 @@ public partial class MainWindow : Window, IDisposable
     /// <summary>Abas visíveis no modo Simples (as demais aparecem só no modo Detalhado), identificadas pela chave interna estável.</summary>
     private static readonly HashSet<string> SimpleTabs = new()
     {
-        "overview", "plan", "optimizations", "session", "sensors", "work", "settings"
+        "overview", "plan", "optimizations", "tools", "session", "sensors", "work", "settings"
     };
 
     /// <summary>Rótulos do seletor Simples/Detalhado do cabeçalho.</summary>
@@ -227,6 +227,8 @@ public partial class MainWindow : Window, IDisposable
     private PlanView? _plan;
     /// <summary>Aba Trabalho, criada sob demanda.</summary>
     private WorkView? _work;
+    /// <summary>Aba Ferramentas, criada sob demanda.</summary>
+    private ToolsView? _tools;
 
     /// <summary>Perfil dos fatos da última leitura; antes da primeira, o perfil gravado.</summary>
     private UsageProfile ActiveProfile => _engine?.Facts.Profile ?? ProfileUi.Current;
@@ -273,6 +275,16 @@ public partial class MainWindow : Window, IDisposable
     }
 
     /// <summary>Abre a aba da chave interna informada (ex.: "plan", "optimizations").</summary>
+    public void OpenTab(string key) => GoToTab(key);
+
+    /// <summary>Abre a aba Ferramentas e destaca o cartão da ferramenta de id informado.</summary>
+    public void GoToTool(string toolId)
+    {
+        GoToTab("tools");
+        _tools?.FocusTool(toolId);
+    }
+
+    /// <summary>Abre a aba da chave interna informada (uso interno).</summary>
     private void GoToTab(string key)
     {
         int i = _pages.FindIndex(p => p.Key == key);
@@ -425,9 +437,18 @@ public partial class MainWindow : Window, IDisposable
         Add("", "displays", "Monitores", "Displays", new[] { "monitores" });
         Add("", "storage", "Armazenamento", "Storage", new[] { "armazenamento" });
         Add("", "system", "Sistema e segurança", "System and security", new[] { "seguranca", "processos", "eventos" });
-        Add("", "optimizations", "Otimizações", "Optimizations", Array.Empty<string>(), view: () =>
+        Add("\uE945", "optimizations", "Otimizações", "Optimizations", Array.Empty<string>(), view: () =>
         {
             var v = new OptimizationsView(() => CompletedFacts, RescanAsync, BeginBusy, EndBusy);
+            Action<ScanEngine> h = _ => v.Refresh();
+            ScanCompleted += h;
+            _scanHandlers.Add(h);
+            return v;
+        });
+        Add("\uE90F", "tools", "Ferramentas", "Tools", Array.Empty<string>(), view: () =>
+        {
+            var v = new ToolsView(() => CompletedFacts, RescanAsync, BeginBusy, EndBusy);
+            _tools = v;
             Action<ScanEngine> h = _ => v.Refresh();
             ScanCompleted += h;
             _scanHandlers.Add(h);
@@ -440,7 +461,7 @@ public partial class MainWindow : Window, IDisposable
     /// <summary>Adiciona a aba "Configurações" (sempre a última).</summary>
     private void AddSettingsPage()
     {
-        var p = new Page { Icon = "", Key = "settings", PtLabel = "Configurações", Label = Loc.T("Configurações", "Settings"), IsPlaceholder = true, View = TrackView(() => new SettingsView(RescanAsync, GetSensorStatusAsync)) };
+        var p = new Page { Icon = "", Key = "settings", PtLabel = "Configurações", Label = Loc.T("Configurações", "Settings"), IsPlaceholder = true, View = TrackView(() => new SettingsView(RescanAsync, GetSensorStatusAsync, CheckForUpdateNowAsync)) };
         _pages.Add(p);
         p.Tab = CreateTab(p);
         Tabs.Items.Add(p.Tab);
@@ -509,11 +530,45 @@ public partial class MainWindow : Window, IDisposable
     {
         _timer.Start();
         _ = BeginScan();
+        StartUpdateFlow();
         if (ProfileUi.NeedsChoice) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(AskProfile));
     }
 
     /// <summary>Fechar a janela dispara o mesmo descarte de <see cref="Dispose"/>.</summary>
-    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e) => Dispose();
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_forceClose && Operations.IsBusy)
+        {
+            // Nunca fecha no meio de uma operação: os serviços que ela paralisou precisam ser religados no finally dela.
+            e.Cancel = true;
+            if (_closeAsking) return;
+            _closeAsking = true;
+            try
+            {
+                if (ConfirmDialog.Ask(this, "WinDiag", Loc.T("Uma operação está em andamento. Aguarde terminar ou cancele-a antes de fechar.", "An operation is in progress. Wait for it to finish or cancel it before closing."),
+                        Loc.T("Em andamento: ", "In progress: ") + Operations.Current, warn: true,
+                        okText: Loc.T("Cancelar a operação e fechar", "Cancel the operation and close"), cancelText: Loc.T("Aguardar", "Wait"), defaultCancel: true))
+                    _ = CancelAndCloseAsync();
+            }
+            finally { _closeAsking = false; }
+            return;
+        }
+        Dispose();
+    }
+
+    /// <summary>true enquanto a pergunta de fechamento está aberta (evita empilhar diálogos).</summary>
+    private bool _closeAsking;
+    /// <summary>true depois que a operação terminou e o fechamento foi liberado.</summary>
+    private bool _forceClose;
+
+    /// <summary>Cancela a operação em curso, espera ela terminar (seus finally religam serviços) e só então fecha a janela.</summary>
+    private async Task CancelAndCloseAsync()
+    {
+        Operations.Cancel();
+        await Operations.WaitIdleAsync(TimeSpan.FromMinutes(2));
+        _forceClose = true;
+        Close();
+    }
 
     /// <summary>Para o timer e a varredura, descarta as abas descartáveis (ex.: captura) e o amostrador ao vivo.</summary>
     public void Dispose()
@@ -745,7 +800,7 @@ public partial class MainWindow : Window, IDisposable
             if (MessageBox.Show(this, Loc.T("Relatório salvo em:\n", "Report saved to:\n") + path + Loc.T("\n\nAbrir agora?", "\n\nOpen now?"), "WinDiag",
                     MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
             {
-                try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); } catch { }
+                try { WinDiag.Core.Util.Shell.OpenUnelevated(path); } catch { }
             }
         }
         catch (Exception ex)
@@ -845,6 +900,7 @@ public partial class MainWindow : Window, IDisposable
         StatusText.Text = finished
             ? Loc.T($"Leitura concluída em {_sw.Elapsed.TotalSeconds.ToString("0.0", Pt)} s", $"Scan finished in {_sw.Elapsed.TotalSeconds.ToString("0.0", Pt)} s")
             : Loc.T($"Lendo {done} de {_total} seções...", $"Reading {done} of {_total} sections...");
+        if (_updatedNote) StatusText.Text += " · " + Loc.T($"Atualizado para a versão {AppInfo.Version}", $"Updated to version {AppInfo.Version}");
         if (engine.Facts.IsAdmin)
         {
             AdminText.Text = Loc.T("Administrador", "Administrator");

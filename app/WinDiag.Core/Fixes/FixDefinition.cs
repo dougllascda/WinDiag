@@ -82,20 +82,22 @@ public sealed class FixDefinition
     public bool MmcOn { get; init; }
     /// <summary>Ação especial: desativar hibernação e Inicialização Rápida.</summary>
     public bool Hib { get; init; }
-    /// <summary>Ação especial: limpar arquivos temporários.</summary>
-    public bool Temp { get; init; }
     /// <summary>Ação especial: desativar itens de inicialização escolhidos pelo usuário.</summary>
     public bool StartupApps { get; init; }
     /// <summary>Perfil a que o item se aplica (Both = todos). A interface filtra por este campo; <see cref="FixEngine.GetStatuses"/> devolve tudo.</summary>
     public Scope Scope { get; init; } = Scope.Both;
-    /// <summary>true = ação pontual (não é um interruptor): executada por <see cref="FixEngine.RunAction"/>, sem desfazer.</summary>
-    public bool IsAction { get; init; }
-    /// <summary>Ação especial: trocar o plano de energia ativo para o recomendado ao trabalho (powercfg /setactive), guardando o GUID anterior.</summary>
+    /// <summary>Ação especial: trocar o plano de energia ativo (powercfg /setactive), guardando o GUID anterior. O alvo é <see cref="PowerPlanTarget"/> ou, sem ele, o plano recomendado ao trabalho.</summary>
     public bool PowerPlan { get; init; }
-    /// <summary>Ação pontual: reiniciar o serviço Spooler.</summary>
-    public bool SpoolerRestart { get; init; }
-    /// <summary>Ação pontual: parar o Spooler, apagar os arquivos da fila de impressão e iniciar o Spooler.</summary>
-    public bool PrintQueueClear { get; init; }
+    /// <summary>Com <see cref="PowerPlan"/>: GUID fixo do plano a ativar; null usa <see cref="FixCatalog.WorkPlanGuid"/>.</summary>
+    public string? PowerPlanTarget { get; init; }
+    /// <summary>Ação especial: depois de gravar o registro (e ao desfazer), reaplica os parâmetros do mouse na sessão atual (SystemParametersInfo SPI_SETMOUSE), para valer sem sair da conta.</summary>
+    public bool MouseApply { get; init; }
+
+    /// <summary>Ação especial: depois de gravar o registro (e ao desfazer), reaplica as teclas de aderência, filtro e alternância na sessão atual (SystemParametersInfo).</summary>
+    public bool AccessibilityApply { get; init; }
+
+    /// <summary>true se o item grava em HKCU (ou em dados do perfil do usuário): valem para o usuário da conta que roda o WinDiag, então não se aplicam quando ele foi elevado com outra conta.</summary>
+    public bool PerUser => Reg.Any(r => r.Path.StartsWith("HKCU", StringComparison.OrdinalIgnoreCase) || r.Path.StartsWith("HKEY_CURRENT_USER", StringComparison.OrdinalIgnoreCase)) || DxString || StartupApps;
 
     /// <summary>Rótulo do risco no idioma atual (Baixo/Médio/Alto ou Low/Medium/High).</summary>
     public string RiskLabel => Risk switch

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using WinDiag.Core;
@@ -12,7 +12,7 @@ public sealed class ConfirmDialog : Window
     private readonly Button _ok;
 
     /// <summary>Construtor privado: use <see cref="Ask"/>, que decide dono, posição e resultado.</summary>
-    private ConfirmDialog(string title, string headline, string? body, Brush? headlineBrush, string? requiredText, string okText, string cancelText)
+    private ConfirmDialog(string title, string headline, string? body, Brush? headlineBrush, string? requiredText, string okText, string cancelText, bool defaultCancel)
     {
         Title = title;
         Width = 520;
@@ -34,7 +34,7 @@ public sealed class ConfirmDialog : Window
         if (!string.IsNullOrWhiteSpace(body))
             root.Children.Add(new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), Foreground = Ui.Res("MutedBrush") });
 
-        _ok = new Button { Content = okText, MinWidth = 90, Margin = new Thickness(0, 0, 8, 0), IsDefault = true };
+        _ok = new Button { Content = okText, MinWidth = 90, Margin = new Thickness(0, 0, 8, 0), IsDefault = !defaultCancel };
         if (requiredText is not null)
         {
             root.Children.Add(new TextBlock
@@ -51,7 +51,7 @@ public sealed class ConfirmDialog : Window
             Loaded += (_, _) => tb.Focus();
         }
         _ok.Click += (_, _) => DialogResult = true;
-        var cancel = new Button { Content = cancelText, MinWidth = 90, IsCancel = true };
+        var cancel = new Button { Content = cancelText, MinWidth = 90, IsCancel = true, IsDefault = defaultCancel };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
         buttons.Children.Add(_ok);
         buttons.Children.Add(cancel);
@@ -61,9 +61,9 @@ public sealed class ConfirmDialog : Window
 
     /// <summary>Pergunta Sim/Não. Retorna true se o usuário confirmou.</summary>
     public static bool Ask(Window? owner, string title, string headline, string? body = null,
-        string? requiredText = null, bool warn = false, string? okText = null, string? cancelText = null)
+        string? requiredText = null, bool warn = false, string? okText = null, string? cancelText = null, bool defaultCancel = false)
     {
-        var d = new ConfirmDialog(title, headline, body, warn ? Ui.Res("WarnBrush") : null, requiredText, okText ?? Loc.T("Sim", "Yes"), cancelText ?? Loc.T("Não", "No"));
+        var d = new ConfirmDialog(title, headline, body, warn ? Ui.Res("WarnBrush") : null, requiredText, okText ?? Loc.T("Sim", "Yes"), cancelText ?? Loc.T("Não", "No"), defaultCancel);
         if (owner is { IsLoaded: true }) d.Owner = owner;
         else d.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         return d.ShowDialog() == true;

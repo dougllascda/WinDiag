@@ -21,9 +21,9 @@ jobs:
       SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
       SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -61,7 +61,7 @@ jobs:
       # Fluxo diferente: o SignPath assina apos o upload, entao exige separar "build" de "assinar".
       # Depois da aprovacao do projeto, descomente e ajuste (veja docs/SIGNING.md):
       #
-      # - uses: actions/upload-artifact@v4
+      # - uses: actions/upload-artifact@v7
       #   id: unsigned
       #   with:
       #     name: unsigned
@@ -108,11 +108,11 @@ jobs:
           Set-Content release-notes.md -Value $out -Encoding UTF8
 
       - name: Atestar procedencia do build
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/*.exe'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: WinDiag-${{ github.ref_name }}
           path: |
@@ -121,7 +121,7 @@ jobs:
           if-no-files-found: error
 
       - name: Criar Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release-notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}

@@ -17,7 +17,7 @@ flowchart LR
 
 ## Findings and severity
 
-`Finding` is an immutable record: `Sev` (`Severity`: `Ok < Info < Aviso < Atencao`), `Title`, `Evidence`, `Explain`, `Action`, `FixId`, `Impact` (0 to 100). Properties set by `SectionResult.Find` and `ScanEngine`: `Section`, `Id` (stable, language-independent), `Simple` (plain-language text for Simple mode), `GuideTopic` (BIOS guide) and `Scope`. Evidence states what was measured; the text must not claim a cause that was not measured.
+`Finding` is an immutable record: `Sev` (`Severity`: `Ok < Info < Aviso < Atencao`), `Title`, `Evidence`, `Explain`, `Action`, `FixId`, `ToolId`, `Impact` (0 to 100). `FixId` links to an adjustment in `FixCatalog`; `ToolId` links to the tool that resolves the finding (see [Tools](tools.md)). Properties set by `SectionResult.Find` and `ScanEngine`: `Section`, `Id` (stable, language-independent), `Simple` (plain-language text for Simple mode), `GuideTopic` (BIOS guide) and `Scope`. Evidence states what was measured; the text must not claim a cause that was not measured.
 
 ## Insights (phase C)
 
@@ -52,7 +52,7 @@ An unknown model resolves to `null`, and the rule then says the data is not avai
 
 ## ActionPlan
 
-`ActionPlan.Build(findings, profile)` returns an ordered `List<ActionStep>` (`Key`, `Order`, `Title`, `Where`, `What`, `Cost`, `Gain`, `Sev`, `Impact`, `FixId`, `SectionKey`...). `ActionCost` separates free configuration steps from hardware. The plan puts free steps first, then orders by severity and impact. It parses the "where / what / cost / gain" markers of `Action` text in both languages. Done steps are stored by the UI in `PlanStore` (`UserPrefs.PlanDone`).
+`ActionPlan.Build(findings, profile)` returns an ordered `List<ActionStep>` (`Key`, `Order`, `Title`, `Where`, `What`, `Cost`, `Gain`, `Sev`, `Impact`, `FixId`, `ToolId`, `SectionKey`...). `ActionCost` separates free configuration steps from hardware. The plan puts free steps first, then orders by severity and impact. It parses the "where / what / cost / gain" markers of `Action` text in both languages. Done steps are stored by the UI in `PlanStore` (`UserPrefs.PlanDone`).
 
 ## Bottlenecks
 
@@ -60,7 +60,7 @@ An unknown model resolves to `null`, and the rule then says the data is not avai
 
 ## How to extend
 
-- **New finding.** Call `res.Find(...)` in a collector or in an `Insights` routine with a new stable `id`. If it only matters while gaming, add its prefix to `ScopeMap` (or pass `scope:`).
+- **New finding.** Call `res.Find(...)` in a collector or in an `Insights` routine with a new stable `id`. Pass `fixId:` when a reversible adjustment resolves it, or `toolId:` when a one-click tool does. If it only matters while gaming, add its prefix to `ScopeMap` (or pass `scope:`).
 - **New platform.** Add a row to the relevant list in `PlatformDb`. Keep names matching what Windows reports.
 - **New score area.** Update `AreaOfCore` or the work area mapping in `GameScore`, plus the tests in `ScoreHistoryTests`/`InsightsTests`.
 - **BIOS guide.** Add a `BiosTopic` value and its text in `BiosGuides`, then pass `guide:` in the finding.

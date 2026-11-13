@@ -33,6 +33,8 @@ public sealed class FixStatus
     /// <summary>Aplicado depois do último boot e o item exige reinício.</summary>
     public bool RebootPending { get; init; }
 
+    /// <summary>Motivo de o item não se aplicar (null quando não há motivo específico), no idioma atual.</summary>
+    public string? Reason { get; init; }
     /// <summary>true se a otimização está em vigor (pelo WinDiag ou externamente).</summary>
     public bool IsOn => Kind is FixStatusKind.AtivoWinDiag or FixStatusKind.AtivoExterno;
     /// <summary>true se a interface pode oferecer o interruptor (item reversível e disponível ou desfazível).</summary>
@@ -44,7 +46,7 @@ public sealed class FixStatus
         FixStatusKind.AtivoWinDiag => Loc.T($"ATIVO (aplicado pelo WinDiag em {Fmt.DateTime(SourceFile?.Created)})", $"ON (applied by WinDiag on {Fmt.DateTime(SourceFile?.Created)})") + (RebootPending ? Loc.T(" - reinicie para concluir", " - restart to finish") : ""),
         FixStatusKind.AtivoExterno => Loc.T("Já está assim (configurado fora do WinDiag ou padrão do Windows)", "Already set (configured outside WinDiag or Windows default)") + (RebootPending ? Loc.T(" - pendente de reinício", " - restart pending") : ""),
         FixStatusKind.Disponivel => Loc.T("Disponível", "Available"),
-        _ => Loc.T("Não se aplica a este PC", "Not applicable to this PC"),
+        _ => Reason ?? Loc.T("Não se aplica a este PC", "Not applicable to this PC"),
     };
 }
 
@@ -89,6 +91,9 @@ public sealed class FixEngine
         DryRun = dryRun;
     }
 
+    /// <summary>Motivo mostrado quando o WinDiag foi aberto com outra conta de administrador e o ajuste é por usuário.</summary>
+    public static string OtherUserReason => Loc.T("O WinDiag foi aberto com outra conta de administrador; este ajuste é por usuário e valeria só para essa conta.", "WinDiag was opened with another administrator account; this setting is per user and would only apply to that account.");
+
     /// <summary>Hora aproximada do último boot (agora menos o tempo ligado).</summary>
     public static DateTime BootTime => DateTime.Now - TimeSpan.FromMilliseconds(Environment.TickCount64);
 
@@ -101,8 +106,13 @@ public sealed class FixEngine
         var list = new List<FixStatus>();
         foreach (var fix in FixCatalog.All)
         {
+            if (facts.ElevatedAsOtherUser && fix.PerUser)
+            {
+                list.Add(new FixStatus { Fix = fix, Kind = FixStatusKind.NaoAplicavel, Reason = OtherUserReason });
+                continue;
+            }
             bool applicable = Try(() => fix.Applicable(facts));
-            if (fix.Temp || fix.StartupApps || fix.IsAction)
+            if (fix.StartupApps)
             {
                 list.Add(new FixStatus { Fix = fix, Kind = applicable ? FixStatusKind.Disponivel : FixStatusKind.NaoAplicavel });
                 continue;
@@ -195,6 +205,11 @@ public sealed class FixEngine
     public OpResult Enable(FixDefinition fix, SystemFacts facts)
     {
         var r = new OpResult();
+        if (facts.ElevatedAsOtherUser && fix.PerUser)
+        {
+            r.Ok = false; r.Error = OtherUserReason;
+            return r;
+        }
         try
         {
             var state = Capture(fix, facts);
@@ -233,42 +248,6 @@ public sealed class FixEngine
             r.SnapshotPath = SaveSnap(new SnapshotFix { Id = fix.Id, Name = Loc.T("Desfazer: ", "Undo: ") + fix.Name, Reversible = true, Action = SnapshotActions.Undo, State = now });
             foreach (var m in Restore(status.Source.State)) Msg(r, fix.Id, m);
             r.RebootNeeded = fix.Reboot;
-        }
-        catch (Exception ex) { Fail(r, fix.Id, ex); }
-        return r;
-    }
-
-    /// <summary>Limpa temporários (não reversível, sem snapshot de estado).</summary>
-    public OpResult CleanTemp()
-    {
-        var r = new OpResult();
-        var fix = FixCatalog.Get("TEMP")!;
-        try
-        {
-            if (!DryRun) Store.Log("TEMP: limpeza iniciada");
-            foreach (var m in Apply(fix, null)) Msg(r, fix.Id, m);
-        }
-        catch (Exception ex) { Fail(r, fix.Id, ex); }
-        return r;
-    }
-
-    /// <summary>
-    /// Executa uma ação pontual do catálogo (<see cref="FixDefinition.IsAction"/>: reiniciar o Spooler, limpar a fila de impressão). Não é reversível e não grava snapshot,
-    /// mas cada passo vai para o changes.log. Em DryRun nada é executado: só as mensagens do que seria feito. Exige administrador.
-    /// </summary>
-    /// <param name="fix">Item do catálogo com <see cref="FixDefinition.IsAction"/> = true.</param>
-    public OpResult RunAction(FixDefinition fix)
-    {
-        var r = new OpResult();
-        if (!fix.IsAction)
-        {
-            r.Ok = false; r.Error = Loc.T("Este item não é uma ação pontual.", "This item is not a one-off action.");
-            return r;
-        }
-        try
-        {
-            if (!DryRun) Store.Log($"{fix.Id}: ação iniciada");
-            foreach (var m in ActionSteps(fix)) Msg(r, fix.Id, m);
         }
         catch (Exception ex) { Fail(r, fix.Id, ex); }
         return r;
@@ -384,7 +363,7 @@ public sealed class FixEngine
 
     // ------------------------------------------------------------------ aplicar / restaurar
 
-    /// <summary>Executa os passos de uma otimização: Temp, registro, serviços, DirectX, apps de inicialização, energia, compressão de memória, BCD e plano de energia. Em DryRun só monta as mensagens.</summary>
+    /// <summary>Executa os passos de uma otimização: registro, serviços, DirectX, apps de inicialização, energia, compressão de memória, BCD e plano de energia. Em DryRun só monta as mensagens.</summary>
     /// <remarks>Os valores anteriores já foram capturados em <see cref="Capture"/> antes desta chamada; é isso que torna cada passo reversível. Falha em qualquer passo lança exceção, tratada por quem chamou (<see cref="Fail"/>).</remarks>
     /// <param name="fix">Otimização a aplicar.</param>
     /// <param name="picked">Apps de inicialização escolhidos (somente para a otimização de inicialização).</param>
@@ -393,17 +372,22 @@ public sealed class FixEngine
     private List<string> Apply(FixDefinition fix, IEnumerable<StartupItem>? picked, SystemFacts? facts = null)
     {
         var msgs = new List<string>();
-        if (fix.Temp)
-        {
-            var dirs = new[] { Path.GetTempPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp") };
-            double before = dirs.Sum(DirMB);
-            if (!DryRun) foreach (var d in dirs) CleanDir(d);
-            msgs.Add($"Temp: {Fmt.Num(before, 1)} MB -> {Fmt.Num(DryRun ? before : dirs.Sum(DirMB), 1)} MB");
-        }
         foreach (var rs in fix.Reg)
         {
             if (!DryRun) Reg.Set(rs.Path, rs.Name, rs.Value, rs.Kind);
             msgs.Add(Loc.T($@"Registro {rs.Path}\{rs.Name} = {rs.Value}", $@"Registry {rs.Path}\{rs.Name} = {rs.Value}"));
+        }
+        if (fix.MouseApply)
+        {
+            if (!DryRun && !MouseApi.ApplyFromRegistry())
+                msgs.Add(Loc.T("Aviso: o Windows não aplicou o mouse na hora; vale após sair da conta e entrar de novo.", "Warning: Windows did not apply the mouse change right away; it takes effect after signing out and in."));
+            else msgs.Add(Loc.T("Parâmetros do mouse aplicados na sessão atual", "Mouse parameters applied to the current session"));
+        }
+        if (fix.AccessibilityApply)
+        {
+            if (!DryRun && !AccessibilityApi.ApplyFromRegistry())
+                msgs.Add(Loc.T("Aviso: o Windows não aplicou os atalhos de acessibilidade na hora; vale após sair da conta e entrar de novo.", "Warning: Windows did not apply the accessibility shortcuts right away; it takes effect after signing out and in."));
+            else msgs.Add(Loc.T("Atalhos de acessibilidade do teclado aplicados na sessão atual", "Keyboard accessibility shortcuts applied to the current session"));
         }
         foreach (var s in fix.Svc)
         {
@@ -448,7 +432,7 @@ public sealed class FixEngine
         }
         if (fix.PowerPlan)
         {
-            string target = FixCatalog.WorkPlanGuid(facts ?? new SystemFacts());
+            string target = fix.PowerPlanTarget ?? FixCatalog.WorkPlanGuid(facts ?? new SystemFacts());
             if (!DryRun)
             {
                 Check(Proc.Run(Proc.Sys32("powercfg.exe"), "/setactive " + target), "powercfg /setactive");
@@ -484,6 +468,16 @@ public sealed class FixEngine
                 if (!DryRun) Reg.Delete(r.Path, r.Name);
                 msgs.Add(Loc.T($@"Registro {r.Path}\{r.Name} removido (não existia antes)", $@"Registry {r.Path}\{r.Name} removed (did not exist before)"));
             }
+        }
+        if (state.Reg.Any(r => string.Equals(r.Path, MouseApi.MousePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!DryRun) MouseApi.ApplyFromRegistry();
+            msgs.Add(Loc.T("Parâmetros do mouse reaplicados na sessão atual", "Mouse parameters re-applied to the current session"));
+        }
+        if (state.Reg.Any(r => r.Path.StartsWith(AccessibilityApi.KeyPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!DryRun) AccessibilityApi.ApplyFromRegistry();
+            msgs.Add(Loc.T("Atalhos de acessibilidade do teclado reaplicados na sessão atual", "Keyboard accessibility shortcuts re-applied to the current session"));
         }
         foreach (var s in state.Svc)
         {
@@ -749,44 +743,12 @@ public sealed class FixEngine
     }
 
     /// <summary>
-    /// Executa as ações pontuais (reiniciar o Spooler, limpar a fila de impressão). Não são reversíveis: não há estado anterior a restaurar.
-    /// O Spooler é parado dentro de um bloco protegido e SEMPRE iniciado de novo no fim (inclusive se a limpeza falhar); os serviços dependentes que estavam
-    /// em execução antes são anotados e religados. Em simulação (<see cref="DryRun"/>) nada é lido nem alterado no serviço.
-    /// </summary>
-    /// <param name="fix">Otimização do tipo ação.</param>
-    /// <returns>Mensagens do que foi feito.</returns>
-    private List<string> ActionSteps(FixDefinition fix)
-    {
-        var msgs = new List<string>();
-        if (fix.SpoolerRestart)
-        {
-            List<string> deps = new();
-            if (!DryRun) deps = WithSpoolerStopped(null);
-            msgs.Add(Loc.T("Serviço Spooler: parado e iniciado", "Spooler service: stopped and started"));
-            if (deps.Count > 0) msgs.Add(Loc.T("Serviços dependentes religados: ", "Dependent services started again: ") + string.Join(", ", deps));
-        }
-        if (fix.PrintQueueClear)
-        {
-            var dir = SpoolDirectory;
-            int deleted = 0, failed = 0;
-            List<string> deps = new();
-            if (DryRun) deleted = CountSpoolFiles(dir);
-            else deps = WithSpoolerStopped(() => { (deleted, failed) = ClearSpoolDirectory(dir); });
-            msgs.Add(Loc.T($"Fila de impressão: {deleted} arquivo(s) apagado(s) de {dir}" + (failed > 0 ? $"; {failed} não puderam ser apagados" : ""),
-                $"Print queue: {deleted} file(s) deleted from {dir}" + (failed > 0 ? $"; {failed} could not be deleted" : "")));
-            msgs.Add(Loc.T("Serviço Spooler: parado e iniciado", "Spooler service: stopped and started"));
-            if (deps.Count > 0) msgs.Add(Loc.T("Serviços dependentes religados: ", "Dependent services started again: ") + string.Join(", ", deps));
-        }
-        return msgs;
-    }
-
-    /// <summary>
     /// Anota os serviços dependentes do Spooler que estão em execução, para religá-los depois; para o Spooler; executa o trabalho opcional; e, no <c>finally</c>,
     /// inicia o Spooler (verificando RUNNING) e religa os dependentes anotados. Se o trabalho falhar, o erro original é o que sobe, mas o Spooler é iniciado do mesmo jeito.
     /// </summary>
     /// <param name="work">Trabalho a fazer com o Spooler parado (null = só reiniciar).</param>
     /// <returns>Nomes dos serviços dependentes religados.</returns>
-    private static List<string> WithSpoolerStopped(Action? work)
+    public static List<string> WithSpoolerStopped(Action? work)
     {
         var deps = ParseRunningServices(SafeEnumDepend());
         var restarted = new List<string>();
@@ -852,7 +814,7 @@ public sealed class FixEngine
 
     /// <summary>Conta os arquivos da fila de impressão (usado na simulação). Qualquer erro devolve 0.</summary>
     /// <param name="dir">Pasta da fila.</param>
-    private static int CountSpoolFiles(string dir)
+    public static int CountSpoolFiles(string dir)
     {
         try { return Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Count() : 0; } catch (Exception) { return 0; }
     }
@@ -961,32 +923,5 @@ public sealed class FixEngine
     {
         var cmd = on ? "Enable-MMAgent -MemoryCompression" : "Disable-MMAgent -MemoryCompression";
         Check(Proc.Run(PsExe, $"-NoProfile -NonInteractive -Command \"{cmd}\"", 30000), cmd);
-    }
-
-    /// <summary>Soma o tamanho dos arquivos de uma pasta, em MB, ignorando o que não for acessível. Erros devolvem 0.</summary>
-    /// <param name="dir">Pasta.</param>
-    private static double DirMB(string dir)
-    {
-        try
-        {
-            if (!Directory.Exists(dir)) return 0;
-            long sum = 0;
-            foreach (var f in new DirectoryInfo(dir).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }))
-            {
-                try { sum += f.Length; } catch { }
-            }
-            return sum / 1048576d;
-        }
-        catch { return 0; }
-    }
-
-    /// <summary>Apaga arquivos e subpastas de uma pasta. O que estiver em uso é ignorado: limpeza de temporários é por melhor esforço e nunca falha o app.</summary>
-    /// <param name="dir">Pasta a limpar.</param>
-    private static void CleanDir(string dir)
-    {
-        if (!Directory.Exists(dir)) return;
-        var di = new DirectoryInfo(dir);
-        foreach (var f in di.EnumerateFiles()) { try { f.Delete(); } catch { } }
-        foreach (var d in di.EnumerateDirectories()) { try { d.Delete(true); } catch { } }
     }
 }
