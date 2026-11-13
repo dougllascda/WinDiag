@@ -5,7 +5,8 @@
 <h1 align="center">WinDiag</h1>
 
 <p align="center">
-  Inventário de hardware, diagnóstico explicado e otimizações reversíveis para jogos no Windows 10/11.
+  Inventário de hardware, diagnóstico explicado, ferramentas de reparo de um clique e otimizações reversíveis<br>
+  para PCs de jogos e de escritório. Windows 10/11.
 </p>
 
 <p align="center">
@@ -19,6 +20,7 @@
   <a href="../../LICENSE"><img alt="Licença" src="https://img.shields.io/badge/licen%C3%A7a-source--available-orange"></a>
   <img alt="Plataforma: Windows 10 | 11" src="https://img.shields.io/badge/plataforma-Windows%2010%20%7C%2011-0078D4">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
+  <a href="https://dougllascda.github.io/WinDiag/"><img alt="Documentação" src="https://img.shields.io/badge/docs-online-1f6feb"></a>
 </p>
 
 <p align="center">
@@ -43,7 +45,14 @@
   </tr>
 </table>
 
-O WinDiag abre já lendo tudo, sem botão "detectar": processador, placa-mãe, memória, placa de vídeo, monitores, discos (com S.M.A.R.T.), virtualização, antivírus, inicialização e eventos. Cada achado vem com **o que significa** e **o que fazer**, e o Resumo ordena os **gargalos prováveis para jogos** pelo impacto.
+O WinDiag abre já lendo tudo, sem botão "detectar": processador, placa-mãe, memória, placa de vídeo, monitores, discos (com S.M.A.R.T.), virtualização, antivírus, inicialização e eventos. Cada achado vem com **o que significa** e **o que fazer**, e aponta a ferramenta ou o interruptor que resolve.
+
+Escolha como você usa o PC e a análise acompanha:
+
+- **Jogos:** o Resumo ordena os gargalos prováveis para jogos pelo impacto, com um modo de sessão de jogo e uma captura do que acontece enquanto você joga.
+- **Trabalho:** impressoras e fila de impressão, programas de fábrica, bateria de notebook, Windows Update e tempo de inicialização.
+
+Quando algo precisa de conserto, a aba **Ferramentas** resolve em um clique (fila de impressão travada, rede que não conecta, disco cheio, arquivos de sistema danificados), sempre mostrando antes os comandos exatos.
 
 ## Destaques
 
@@ -111,9 +120,9 @@ A aba Ferramentas existe nos dois perfis. Os comandos são fixos no código: o W
 | Impressão | Destravar fila de impressão | Para o spooler, apaga os trabalhos pendentes e o religa | Sim | Não |
 | Impressão | Reiniciar spooler / Página de teste | Reinicia o serviço / imprime a página de teste do Windows | Sim / Não | Não |
 | Rede | Teste de rede | Faz ping no gateway do adaptador que sai para a internet, em 1.1.1.1 e em 8.8.8.8, e uma resolução de nome; mostra latência, jitter, perda e um veredito. Não altera nada | Não | Não |
-| Rede | Limpar DNS / Renovar IP / Sincronizar hora | `ipconfig /flushdns`, `ipconfig /renew`, `w32tm /resync` | Sim | Não |
+| Rede | Limpar DNS / Renovar IP / Sincronizar hora | `ipconfig /flushdns`, `ipconfig /release` e depois `/renew`, `w32tm /resync` | Sim | Não |
 | Rede | Redefinir pilha de rede | `netsh winsock reset` e `netsh int ip reset`. A confirmação lista os IPs fixos que seriam apagados e exige marcar "Estou ciente" | Sim | Sim |
-| Limpeza | Limpeza de disco | Temporários, caches do Windows Update e da Otimização de Entrega, miniaturas, relatórios de erro, lixeira. Você escolhe os itens e vê os tamanhos | Não | Não |
+| Limpeza | Limpeza de disco | Temporários com mais de 24 horas, caches do Windows Update e da Otimização de Entrega, miniaturas, relatórios de erro, lixeira. Você escolhe os itens e vê os tamanhos. Três dos itens só são limpos com administrador | Não | Não |
 | Jogos | Cache de shaders | Limpa os caches de shaders do DirectX, NVIDIA e AMD | Não | Não |
 | Reparo | SFC / DISM / CHKDSK | `sfc /scannow`, `DISM /Online /Cleanup-Image /RestoreHealth`, `chkdsk /scan` (só leitura) | Sim | Não |
 | Reparo | Redefinir Windows Update | Para os serviços, renomeia `SoftwareDistribution` e `catroot2`, religa os serviços | Sim | Não |
@@ -155,7 +164,10 @@ As ferramentas não são reversíveis, exceto por ponto de restauração, que o 
 - Itens de risco alto pedem para digitar `CONFIRMO` antes de serem aplicados.
 - As otimizações salvam um snapshot JSON do estado anterior em `%ProgramData%\WinDiagMaint\snapshots\` antes de serem aplicadas; o histórico fica em `changes.log`. Desligar o interruptor, ou restaurar um snapshot, volta ao valor salvo.
 - As ferramentas não geram snapshot. Mostram os comandos que vão executar, pedem confirmação quando alteram algo ou exigem administrador, registram cada execução em `changes.log` e em `%ProgramData%\WinDiagMaint\tools-history.json`, e oferecem um ponto de restauração antes de toda ferramenta de risco não baixo. A desinstalação de programas de fábrica também não é reversível e sempre pede confirmação.
-- Sem telemetria. O WinDiag não baixa nem executa código de terceiros. A verificação de atualizações (frequência configurável, padrão semanal, pode ser Manual) consulta apenas o repositório oficial; o download e a instalação só acontecem com o seu clique, com o arquivo conferido por SHA-256. As ferramentas de rede (teste de conexão: ping em 1.1.1.1 e 8.8.8.8 e uma resolução de nome; sincronizar relógio) e o DISM usam a internet quando você as executa. As opções ficam em Configurações > Atualizações (Ao abrir o app, Diariamente, Semanalmente, Mensalmente ou Manualmente). O arquivo baixado é conferido com o `SHA256SUMS.txt` do mesmo release. Os executáveis ainda não têm assinatura de código; por isso a conferência prova integridade, não autoria (veja [docs/modules/updates.md](../modules/updates.md), em inglês).
+- Sem telemetria. O WinDiag não baixa nem executa código de terceiros.
+- O uso da internet se limita a três coisas: a verificação de atualizações (semanal por padrão, ajustável em Configurações > Atualizações, pode ser Manualmente), que só consulta o repositório oficial; o download da atualização, que só acontece com o seu clique; e as ferramentas de rede (teste de conexão, sincronizar relógio) e o DISM quando você as executa.
+- A atualização é baixada apenas dos releases oficiais e conferida com o `SHA256SUMS.txt` do mesmo release antes de ser executada. Os executáveis ainda não têm assinatura de código; por isso a conferência prova integridade, não autoria (veja [docs/modules/updates.md](../modules/updates.md), em inglês).
+- Se o WinDiag for aberto com as credenciais de outra conta de administrador, os ajustes e as limpezas por usuário ficam desativados, porque alterariam o perfil daquela conta, e não o seu.
 - Sem ofuscação, empacotador nem código gerado em tempo de execução. As chamadas nativas se limitam a APIs documentadas do Win32.
 - O ganho varia por PC e por jogo, e as otimizações são opcionais. Mais em [SECURITY.pt-BR.md](SECURITY.pt-BR.md).
 
@@ -165,7 +177,16 @@ As ferramentas não são reversíveis, exceto por ponto de restauração, que o 
 Os executáveis ainda não têm assinatura de código, então o SmartScreen pode exibir um aviso. Escolha "Mais informações" > "Executar assim mesmo" depois de conferir o hash SHA256 e o atestado de build (veja [Verifique o download](#verifique-o-download)).
 
 **Por que ele pede administrador?**
-S.M.A.R.T., BCD, minifiltros do sistema de arquivos e as otimizações exigem esse acesso. Sem ele, o app abre mesmo assim e marca as leituras afetadas como parciais ("exige administrador").
+S.M.A.R.T., BCD, minifiltros do sistema de arquivos, as otimizações e a maioria das ferramentas exigem esse acesso. Sem ele, o app abre mesmo assim e marca as leituras afetadas como parciais ("exige administrador").
+
+**Como funcionam as atualizações?**
+O WinDiag consulta o repositório oficial na frequência que você escolher em Configurações > Atualizações (semanal por padrão, ou nunca, se você escolher Manualmente). Quando há versão mais nova ele mostra um aviso; nada é baixado até você clicar em **Atualizar agora**. O arquivo é então conferido por SHA-256, o app fecha, instala a atualização e abre de novo.
+
+**Dá para desfazer o que uma ferramenta fez?**
+As otimizações sempre podem ser desfeitas, uma a uma. As ferramentas não: um cache limpo ou uma fila de impressão apagada não voltam. Por isso cada ferramenta mostra o que vai executar e pede confirmação, e o WinDiag oferece um ponto de restauração antes das mais arriscadas.
+
+**Minha fila de impressão travou. O que eu executo?**
+Abra **Ferramentas** e execute **Destravar impressão (limpar a fila)**. Ela para o serviço de impressão, apaga os trabalhos presos e inicia o serviço de novo. Os documentos que estavam na fila precisam ser enviados outra vez.
 
 **Meu antivírus acusou o arquivo.**
 O executável não é assinado e, quando você liga as otimizações, altera configurações do sistema (registro, BCD, energia) e executa comandos de manutenção. Alguns antivírus podem desconfiar disso. Abra uma issue com o nome da detecção e a versão.
@@ -195,7 +216,7 @@ pwsh -File tools\publish.ps1 -Scan   # gera dist\ e, se houver Kaspersky, faz um
 
 - `app\WinDiag.Core`: coletores, regras, motor de otimizações e relatório.
 - `app\WinDiag.App`: interface WPF.
-- `app\WinDiag.Cli`: ferramenta de teste sem interface (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`).
+- `app\WinDiag.Cli`: ferramenta de teste sem interface (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`, `--check-update`, `--download-update`).
 - `app\WinDiag.Tests`: testes xUnit.
 - [`docs\ARCHITECTURE.md`](../ARCHITECTURE.md): visão geral da arquitetura (em inglês).
 

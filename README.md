@@ -5,7 +5,8 @@
 <h1 align="center">WinDiag</h1>
 
 <p align="center">
-  Hardware inventory, explained diagnostics and reversible gaming optimizations for Windows 10/11.
+  Hardware inventory, explained diagnostics, one-click repair tools and reversible optimizations<br>
+  for gaming and office PCs. Windows 10/11.
 </p>
 
 <p align="center">
@@ -19,6 +20,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-source--available-orange"></a>
   <img alt="Platform: Windows 10 | 11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4">
+  <a href="https://dougllascda.github.io/WinDiag/"><img alt="Documentation" src="https://img.shields.io/badge/docs-online-1f6feb"></a>
 </p>
 
 <p align="center">
@@ -43,7 +45,14 @@
   </tr>
 </table>
 
-WinDiag opens already reading everything, with no "detect" button: processor, motherboard, memory, graphics card, monitors, disks (with S.M.A.R.T.), virtualization, antivirus, startup and events. Each finding comes with **what it means** and **what to do**, and the summary ranks the **likely gaming bottlenecks** by impact.
+WinDiag opens already reading everything, with no "detect" button: processor, motherboard, memory, graphics card, monitors, disks (with S.M.A.R.T.), virtualization, antivirus, startup and events. Each finding comes with **what it means** and **what to do**, and points to the tool or switch that resolves it.
+
+Pick how you use the PC and the analysis follows:
+
+- **Gaming:** the summary ranks the likely gaming bottlenecks by impact, with a game session mode and a capture of what happens while you play.
+- **Work:** printers and the print queue, factory-installed programs, laptop battery, Windows Update and boot time.
+
+When something needs fixing, the **Tools** tab does it in one click (a stuck print queue, a network that will not connect, a full disk, damaged system files), always showing the exact commands first.
 
 ## Highlights
 
@@ -111,9 +120,9 @@ The Tools tab is available in both profiles. Commands are fixed in the code: Win
 | Printing | Unstick print queue | Stops the Spooler, deletes pending jobs, starts it again | Yes | No |
 | Printing | Restart Spooler / Test page | Restarts the service / prints the Windows test page | Yes / No | No |
 | Network | Network test | Pings the gateway of the adapter that reaches the internet, 1.1.1.1 and 8.8.8.8, plus one name lookup; shows latency, jitter, loss and a verdict. Changes nothing | No | No |
-| Network | Flush DNS / Renew IP / Sync time | `ipconfig /flushdns`, `ipconfig /renew`, `w32tm /resync` | Yes | No |
+| Network | Flush DNS / Renew IP / Sync time | `ipconfig /flushdns`, `ipconfig /release` then `/renew`, `w32tm /resync` | Yes | No |
 | Network | Reset network stack | `netsh winsock reset` and `netsh int ip reset`. The confirmation lists any static IPs that would be erased and requires ticking "I understand" | Yes | Yes |
-| Cleanup | Disk cleanup | Temporary files, Windows Update and Delivery Optimization caches, thumbnails, error reports, Recycle Bin. You pick the items and see their sizes | No | No |
+| Cleanup | Disk cleanup | Temporary files older than 24 hours, Windows Update and Delivery Optimization caches, thumbnails, error reports, Recycle Bin. You pick the items and see their sizes. Three of the items are only cleaned with administrator rights | No | No |
 | Gaming | Shader cache | Clears the DirectX, NVIDIA and AMD shader caches | No | No |
 | Repair | SFC / DISM / CHKDSK | `sfc /scannow`, `DISM /Online /Cleanup-Image /RestoreHealth`, `chkdsk /scan` (read-only) | Yes | No |
 | Repair | Reset Windows Update | Stops the services, renames `SoftwareDistribution` and `catroot2`, starts them again | Yes | No |
@@ -155,7 +164,10 @@ Tools are not reversible, except through a restore point, which WinDiag offers b
 - High-risk items ask you to type `CONFIRM` before they are applied.
 - Optimizations save a JSON snapshot of the previous state in `%ProgramData%\WinDiagMaint\snapshots\` before they are applied; the history is in `changes.log`. Turning the switch off, or restoring a snapshot, goes back to the saved value.
 - Tools have no snapshot. They show the commands they will run, ask for confirmation when they change something or need administrator rights, record each run in `changes.log` and `%ProgramData%\WinDiagMaint\tools-history.json`, and offer a restore point before every tool whose risk is not low. Uninstalling factory-installed programs is also not reversible and always asks for confirmation.
-- No telemetry. WinDiag does not download or run third-party code. The update check (configurable frequency, weekly by default, can be Manual) queries only the official repository; download and installation happen only on your click, with the file verified by SHA-256. The network tools (connection test: ping to 1.1.1.1 and 8.8.8.8 and one name lookup; clock sync) and DISM use the internet when you run them. Update settings are in Settings > Updates (On app start, Daily, Weekly, Monthly or Manually). The downloaded file is checked against the `SHA256SUMS.txt` of the same release. The executables are not code-signed yet, so this check proves integrity, not authorship (see [docs/modules/updates.md](docs/modules/updates.md)).
+- No telemetry. WinDiag does not download or run third-party code.
+- Internet use is limited to three things: the update check (weekly by default, set in Settings > Updates, can be Manually), which only queries the official repository; the update download, which happens only on your click; and the network tools (connection test, clock sync) and DISM when you run them.
+- An update is downloaded only from the official releases and checked against the `SHA256SUMS.txt` of the same release before it runs. The executables are not code-signed yet, so this check proves integrity, not authorship (see [docs/modules/updates.md](docs/modules/updates.md)).
+- If WinDiag is opened with the credentials of another administrator account, per-user adjustments and cleanups are disabled, because they would change that account's profile instead of yours.
 - No obfuscation, packer or runtime-generated code. Native calls are limited to documented Win32 APIs.
 - Gains vary by PC and game; optimizations are optional. Read more in [SECURITY.md](.github/SECURITY.md).
 
@@ -165,7 +177,16 @@ Tools are not reversible, except through a restore point, which WinDiag offers b
 The executables are not code-signed yet, so SmartScreen may show a warning. Choose "More info" > "Run anyway" after checking the SHA256 hash and the build attestation (see [Verify your download](#verify-your-download)).
 
 **Why does it ask for administrator rights?**
-S.M.A.R.T., BCD, file system minifilters and the optimizations need that access. Without it, the app still opens and marks affected readings as partial ("requires administrator").
+S.M.A.R.T., BCD, file system minifilters, the optimizations and most tools need that access. Without it, the app still opens and marks affected readings as partial ("requires administrator").
+
+**How do updates work?**
+WinDiag checks the official repository on the schedule you choose in Settings > Updates (weekly by default, or never if you pick Manually). When there is a newer version it shows a banner; nothing is downloaded until you click **Update now**. The file is then verified by SHA-256, the app closes, installs the update and opens again.
+
+**Can I undo what a tool did?**
+Optimizations can always be undone, one by one. Tools cannot: a cleaned cache or a cleared print queue does not come back. That is why each tool shows what it will run, asks for confirmation, and WinDiag offers a restore point before the riskier ones.
+
+**My print queue is stuck. What do I run?**
+Open **Tools** and run **Unstick printing (clear the queue)**. It stops the print service, deletes the stuck jobs and starts the service again. The documents that were in the queue need to be sent again.
 
 **My antivirus flagged it.**
 The executable is unsigned and, when you turn optimizations on, changes system settings (registry, BCD, power) and runs maintenance commands. Some antivirus products may be suspicious of that. Please open an issue with the detection name and the version.
@@ -195,7 +216,7 @@ pwsh -File tools\publish.ps1 -Scan   # builds dist\ and, if Kaspersky is install
 
 - `app\WinDiag.Core`: collectors, rules, the optimization engine and the report.
 - `app\WinDiag.App`: WPF interface.
-- `app\WinDiag.Cli`: headless test tool (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`).
+- `app\WinDiag.Cli`: headless test tool (`--dump`, `--live`, `--fixes`, `--dry-enable`, `--dry-disable`, `--tools`, `--dry-tool`, `--check-update`, `--download-update`).
 - `app\WinDiag.Tests`: xUnit tests.
 - `docs\ARCHITECTURE.md`: architecture overview.
 

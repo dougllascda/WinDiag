@@ -10,6 +10,10 @@
       href: ../modules/analysis-and-rules.md
     - name: Optimizations
       href: ../modules/optimizations.md
+    - name: Tools
+      href: ../modules/tools.md
+    - name: Updates
+      href: ../modules/updates.md
     - name: Sensors
       href: ../modules/sensors.md
     - name: Work profile
